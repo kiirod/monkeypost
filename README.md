@@ -1,10 +1,12 @@
 [![Monkeypost](https://mtgoals.zandovo.com/images/readme_picture.png)](https://mtgoals.cc/)
 <br />
 
-[![HTML5](https://img.shields.io/badge/typescript-3178c6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![TypeScript](https://img.shields.io/badge/typescript-3178c6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![CSS3](https://img.shields.io/badge/CSS3-%231572B6?style=for-the-badge&logo=css&logoColor=white)](https://wikipedia.org/wiki/css)
 [![JavaScript](https://img.shields.io/badge/javascript-%23F7DF1E.svg?style=for-the-badge&logo=javascript&logoColor=black)](https://wikipedia.org/wiki/javascript)
+[![NextJS](https://img.shields.io/badge/NextJS-black?style=for-the-badge&logo=next.js&logoColor=white)](https://www.vercel.com/)
 [![Vercel](https://img.shields.io/badge/vercel-%23000000.svg?style=for-the-badge&logo=vercel&logoColor=white)](https://vercel.com)
+[![Tailwind](https://img.shields.io/badge/tailwind-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
 [![Supabase](https://img.shields.io/badge/supabase-%233ECF8E.svg?style=for-the-badge&logo=supabase&logoColor=white)](https://supabase.com)
 [![Monkeytype](https://img.shields.io/badge/MT%20FAN%20PROJECT-E2B714?style=for-the-badge&logo=monkeytype&logoColor=white)](https://monkeytype.com)
 
