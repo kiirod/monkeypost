@@ -1,0 +1,24 @@
+{
+  "redirects": [
+    {
+      "source": "/discord",
+      "destination": "https://dsc.gg/mtprojects",
+      "permanent": true
+    },
+    {
+      "source": "/x",
+      "destination": "https://x.com/mtprojs",
+      "permanent": true
+    },
+    {
+      "source": "/twitter",
+      "destination": "https://x.com/mtprojs",
+      "permanent": true
+    },
+    {
+      "source": "/dev",
+      "destination": "https://home.mtgoals.cc",
+      "permanent": true
+    }
+  ]
+}
