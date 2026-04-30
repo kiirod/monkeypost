@@ -1,4 +1,4 @@
-[![Monkeypost](https://mtgoals.zandovo.com/images/readme_picture.png)](https://mtgoals.cc/)
+[![Monkeypost](https://cdn.mtgoals.cc/images/monkeypost.png)](https://post.mtgoals.cc/)
 <br />
 
 [![TypeScript](https://img.shields.io/badge/typescript-3178c6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
