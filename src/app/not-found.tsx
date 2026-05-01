@@ -10,13 +10,14 @@ export default function NotFound() {
 
       
         href="/"
-        className="mt-10 flex items-center gap-2.5 px-6 py-3 rounded-xl text-sm font-medium text-white/70 hover:text-white bg-white/[0.08] hover:bg-white/[0.13] border border-white/10 transition-all duration-200"
+        className="mt-10 flex items-center gap-3 px-6 py-3 rounded-xl text-sm font-medium text-white border border-white border-opacity-10 bg-white bg-opacity-10 hover:bg-opacity-20 transition-all duration-200"
       >
         <svg
           viewBox="0 0 16 16"
           fill="none"
           xmlns="http://www.w3.org/2000/svg"
-          className="w-4 h-4"
+          width="16"
+          height="16"
         >
           <path
             fillRule="evenodd"
