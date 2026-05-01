@@ -206,8 +206,15 @@ function PostCard({
       <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
         <Avatar url={post.pfp_url} username={post.username} size={40} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ color: "#e2b714", fontWeight: 700, fontSize: 14, marginBottom: 4 }}>
-            @{post.username}
+          <div style={{ marginBottom: 4 }}>
+            <span style={{ color: "#e2b714", fontWeight: 700, fontSize: 14 }}>
+              @{post.username}
+            </span>
+            {post.username.toLowerCase() === "kiirod" && (
+              <div style={{ color: "#e2b714", opacity: 0.5, fontSize: 11, marginTop: 1 }}>
+                Owner
+              </div>
+            )}
           </div>
           <div style={{ fontSize: 15, lineHeight: 1.5, wordBreak: "break-word", color: "#d1d0c5" }}>
             {post.content}
@@ -319,6 +326,7 @@ export default function Home() {
   const [pfpFile, setPfpFile] = useState<File | null>(null);
   const [pfpPreview, setPfpPreview] = useState<string | null>(null);
   const [signupError, setSignupError] = useState("");
+  const [authMode, setAuthMode] = useState<"signup" | "login">("signup");
 
   // App state
   const [currentUser, setCurrentUser] = useState<{ id: string; username: string; pfp_url: string | null } | null>(null);
@@ -428,6 +436,38 @@ export default function Home() {
     await supabase.from("profiles").upsert({ id: uid, username, pfp_url });
     setCurrentUser({ id: uid, username, pfp_url });
 
+    await loadPosts();
+    setStep("app");
+  }
+
+  // Log in (returning users)
+  async function handleLogin() {
+    setSignupError("");
+    if (!username.trim() || !password) {
+      setSignupError("Please enter your username and password.");
+      return;
+    }
+    setStep("loading");
+    const { data: authData, error: authErr } = await supabase.auth.signInWithPassword({
+      email: `${username.toLowerCase()}@monkeypost.local`,
+      password,
+    });
+    if (authErr || !authData.user) {
+      setStep("signup");
+      setSignupError("Invalid username or password.");
+      return;
+    }
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", authData.user.id)
+      .single();
+    if (!profile) {
+      setStep("signup");
+      setSignupError("Account not found.");
+      return;
+    }
+    setCurrentUser({ id: authData.user.id, username: profile.username, pfp_url: profile.pfp_url });
     await loadPosts();
     setStep("app");
   }
@@ -542,7 +582,7 @@ export default function Home() {
           </span>
         </div>
 
-        {/* Sign up form */}
+        {/* Sign up / Log in form */}
         <div
           style={{
             marginTop: 60,
@@ -554,9 +594,30 @@ export default function Home() {
             gap: 16,
           }}
         >
-          <h2 style={{ fontSize: 26, fontWeight: 700, marginBottom: 8, color: "#d1d0c5" }}>
-            Sign up
-          </h2>
+          {/* Mode toggle */}
+          <div style={{ display: "flex", gap: 0, marginBottom: 4, background: "#2c2e31", borderRadius: 8, padding: 4 }}>
+            {(["signup", "login"] as const).map((mode) => (
+              <button
+                key={mode}
+                onClick={() => { setAuthMode(mode); setSignupError(""); }}
+                style={{
+                  flex: 1,
+                  padding: "8px 0",
+                  border: "none",
+                  borderRadius: 6,
+                  background: authMode === mode ? "#e2b714" : "none",
+                  color: authMode === mode ? "#323437" : "#646669",
+                  fontWeight: 700,
+                  fontSize: 14,
+                  fontFamily: "inherit",
+                  cursor: "pointer",
+                  transition: "background 0.15s, color 0.15s",
+                }}
+              >
+                {mode === "signup" ? "Sign up" : "Log in"}
+              </button>
+            ))}
+          </div>
 
           <input
             value={username}
@@ -584,6 +645,7 @@ export default function Home() {
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && (authMode === "login" ? handleLogin() : handleSignup())}
             placeholder="Password"
             style={{
               background: "#2c2e31",
@@ -599,50 +661,54 @@ export default function Home() {
             }}
           />
 
-          {/* Profile picture button */}
-          <input
-            ref={pfpInputRef}
-            type="file"
-            accept=".jpeg,.jpg,.png,.gif,.avif,.webp"
-            style={{ display: "none" }}
-            onChange={handlePfpPick}
-          />
-          <button
-            onClick={() => pfpInputRef.current?.click()}
-            style={{
-              background: "#2c2e31",
-              border: "1px solid #3a3d42",
-              borderRadius: 8,
-              padding: "12px 16px",
-              color: "#d1d0c5",
-              fontSize: 15,
-              fontFamily: "inherit",
-              cursor: "pointer",
-              textAlign: "left",
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-            }}
-          >
-            {pfpPreview ? (
-              <>
-                <img src={pfpPreview} alt="pfp" style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover" }} />
-                <span style={{ color: "#e2b714" }}>Profile picture selected</span>
-              </>
-            ) : (
-              <>
-                <span style={{ color: "#646669" }}>📷</span>
-                <span>Upload Profile Picture</span>
-              </>
-            )}
-          </button>
+          {/* Profile picture button — signup only */}
+          {authMode === "signup" && (
+            <>
+              <input
+                ref={pfpInputRef}
+                type="file"
+                accept=".jpeg,.jpg,.png,.gif,.avif,.webp"
+                style={{ display: "none" }}
+                onChange={handlePfpPick}
+              />
+              <button
+                onClick={() => pfpInputRef.current?.click()}
+                style={{
+                  background: "#2c2e31",
+                  border: "1px solid #3a3d42",
+                  borderRadius: 8,
+                  padding: "12px 16px",
+                  color: "#d1d0c5",
+                  fontSize: 15,
+                  fontFamily: "inherit",
+                  cursor: "pointer",
+                  textAlign: "left",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                }}
+              >
+                {pfpPreview ? (
+                  <>
+                    <img src={pfpPreview} alt="pfp" style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover" }} />
+                    <span style={{ color: "#e2b714" }}>Profile picture selected</span>
+                  </>
+                ) : (
+                  <>
+                    <span style={{ color: "#646669" }}>📷</span>
+                    <span>Upload Profile Picture</span>
+                  </>
+                )}
+              </button>
+            </>
+          )}
 
           {signupError && (
             <div style={{ color: "#ca4754", fontSize: 13 }}>{signupError}</div>
           )}
 
           <button
-            onClick={handleSignup}
+            onClick={authMode === "login" ? handleLogin : handleSignup}
             style={{
               background: "#e2b714",
               border: "none",
@@ -657,7 +723,7 @@ export default function Home() {
               transition: "opacity 0.15s",
             }}
           >
-            Sign up!
+            {authMode === "login" ? "Log in!" : "Sign up!"}
           </button>
         </div>
       </main>
