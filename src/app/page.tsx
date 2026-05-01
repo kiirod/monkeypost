@@ -8,7 +8,7 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-// ── SVGs 
+// ── SVGs ──────────────────────────────────────────────────────────────────────
 
 const LoadingSpinner = () => (
   <svg
@@ -95,7 +95,7 @@ const SupportIcon = () => (
   </svg>
 );
 
-// ── Types 
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 interface Post {
   id: string;
@@ -119,7 +119,7 @@ interface Comment {
   created_at: string;
 }
 
-// ── Helpers 
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function Avatar({ url, username, size = 36 }: { url: string | null; username: string; size?: number }) {
   const initials = username?.slice(0, 2).toUpperCase() ?? "??";
@@ -153,7 +153,7 @@ function Avatar({ url, username, size = 36 }: { url: string | null; username: st
   );
 }
 
-// ── Post Card
+// ── Post Card ─────────────────────────────────────────────────────────────────
 
 function PostCard({
   post,
@@ -169,6 +169,11 @@ function PostCard({
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [localComments, setLocalComments] = useState<Comment[]>(post.comments ?? []);
+
+  // Keep localComments in sync when the post prop refreshes from the server
+  useEffect(() => {
+    setLocalComments(post.comments ?? []);
+  }, [post.comments]);
 
   const liked = currentUser ? post.liked_by?.includes(currentUser.id) : false;
   const bookmarked = currentUser ? post.bookmarked_by?.includes(currentUser.id) : false;
@@ -304,11 +309,11 @@ function PostCard({
   );
 }
 
-// ── Main Component 
+// ── Main Component ────────────────────────────────────────────────────────────
 
 export default function Home() {
   // Auth state
-  const [step, setStep] = useState<"signup" | "loading" | "app">("signup");
+  const [step, setStep] = useState<"signup" | "loading" | "app">("loading");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [pfpFile, setPfpFile] = useState<File | null>(null);
@@ -329,13 +334,40 @@ export default function Home() {
   const pfpInputRef = useRef<HTMLInputElement>(null);
   const postImageRef = useRef<HTMLInputElement>(null);
 
+  // Restore session on mount
+  useEffect(() => {
+    async function restoreSession() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", session.user.id)
+          .single();
+        if (profile) {
+          setCurrentUser({ id: session.user.id, username: profile.username, pfp_url: profile.pfp_url });
+          await loadPostsInner();
+          setStep("app");
+          return;
+        }
+      }
+      setStep("signup");
+    }
+    restoreSession();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Load posts
-  async function loadPosts() {
+  async function loadPostsInner() {
     const { data } = await supabase
       .from("posts")
       .select("*")
       .order("created_at", { ascending: false });
     if (data) setPosts(data as Post[]);
+  }
+
+  async function loadPosts() {
+    await loadPostsInner();
   }
 
   // Handle pfp file pick
@@ -367,17 +399,15 @@ export default function Home() {
 
     // Create auth user
     const { data: authData, error: authErr } = await supabase.auth.signUp({
-      email: `${username.toLowerCase()}@mtgoals.cc`,
+      email: `${username.toLowerCase()}@monkeypost.local`,
       password,
     });
 
-if (authErr?.message?.includes("already registered")) {
-    setSignupError("Username is already taken. Try another one!");
-  } else {
-    setSignupError(authErr?.message ?? "Sign up failed.");
-  }
-  return;
-}
+    if (authErr || !authData.user) {
+      setStep("signup");
+      setSignupError(authErr?.message ?? "Sign up failed.");
+      return;
+    }
 
     const uid = authData.user.id;
     let pfp_url: string | null = null;
@@ -483,7 +513,7 @@ if (authErr?.message?.includes("already registered")) {
       ? posts.filter((p) => p.bookmarked_by?.includes(currentUser.id))
       : posts;
 
-  // ── Render: Signup
+  // ── Render: Signup ─────────────────────────────────────────────────────────
 
   if (step === "signup") {
     return (
@@ -634,7 +664,7 @@ if (authErr?.message?.includes("already registered")) {
     );
   }
 
-  // ── Render: Loading
+  // ── Render: Loading ────────────────────────────────────────────────────────
 
   if (step === "loading") {
     return (
@@ -658,7 +688,7 @@ if (authErr?.message?.includes("already registered")) {
     );
   }
 
-  // ── Render: App
+  // ── Render: App ────────────────────────────────────────────────────────────
 
   return (
     <main
