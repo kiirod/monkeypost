@@ -9,7 +9,7 @@ const robotoMono = Roboto_Mono({
 
 export const metadata: Metadata = {
   title: "Monkeypost",
-  description: "Monkeyposts is the social media for Monkeytype, keyboards, typeracer, typegg, and so much more!",
+  description: "Monkeypost is the social media for Monkeytype, keyboards, typeracer, typegg, and so much more!",
 };
 
 export default function RootLayout({
