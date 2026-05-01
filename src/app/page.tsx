@@ -48,7 +48,6 @@ const BookmarkIcon = ({ filled }: { filled?: boolean }) => (
     <g fill={filled ? "#ffffff" : "none"} stroke="#ffffff" strokeWidth={filled ? 0 : 1.5}>
       <path d="M437,153 L423,153 C420.791,153 419,154.791 419,157 L419,179 C419,181.209 420.791,183 423,183 L430,176 L437,183 C439.209,183 441,181.209 441,179 L441,157 C441,154.791 439.209,153 437,153" transform="translate(-419, -153)" fill={filled ? "#ffffff" : "none"} />
     </g>
-    {/* simpler bookmark */}
     <path d="M5 3h12a1 1 0 011 1v20l-7-5-7 5V4a1 1 0 011-1z" fill={filled ? "#ffffff" : "none"} stroke="#ffffff" strokeWidth="1.5" strokeLinejoin="round" />
   </svg>
 );
@@ -92,6 +91,13 @@ const DevIcon = () => (
 const SupportIcon = () => (
   <svg fill="#ffffff" viewBox="0 0 32 32" version="1.1" xmlns="http://www.w3.org/2000/svg" width={20} height={20}>
     <path d="M30 16l-8.485 8.485-2.828-2.828 5.656-5.657-5.657-5.657 2.828-2.828 8.486 8.485zM2 16l8.485-8.485 2.828 2.828-5.656 5.657 5.657 5.657-2.828 2.828-8.486-8.485z" />
+  </svg>
+);
+
+const TrashIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width={16} height={16}>
+    <path d="M3 6H5H21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M8 6V4C8 3.46957 8.21071 2.96086 8.58579 2.58579C8.96086 2.21071 9.46957 2 10 2H14C14.5304 2 15.0391 2.21071 15.4142 2.58579C15.7893 2.96086 16 3.46957 16 4V6M19 6L18.1168 19.1042C18.0504 20.1554 17.1886 21 16.135 21H7.86502C6.81138 21 5.94962 20.1554 5.88316 19.1042L5 6H19Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 );
 
@@ -160,23 +166,26 @@ function PostCard({
   currentUser,
   onLike,
   onBookmark,
+  onDelete,
 }: {
   post: Post;
   currentUser: { id: string; username: string; pfp_url: string | null } | null;
   onLike: (id: string) => void;
   onBookmark: (id: string) => void;
+  onDelete: (id: string) => void;
 }) {
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [localComments, setLocalComments] = useState<Comment[]>(post.comments ?? []);
+  const [deleteHovered, setDeleteHovered] = useState(false);
 
-  // Keep localComments in sync when the post prop refreshes from the server
   useEffect(() => {
     setLocalComments(post.comments ?? []);
   }, [post.comments]);
 
   const liked = currentUser ? post.liked_by?.includes(currentUser.id) : false;
   const bookmarked = currentUser ? post.bookmarked_by?.includes(currentUser.id) : false;
+  const isOwner = currentUser?.id === post.user_id;
 
   async function submitComment() {
     if (!commentText.trim() || !currentUser) return;
@@ -268,6 +277,25 @@ function PostCard({
               <CommentIcon />
               <span style={{ fontSize: 13 }}>{localComments.length}</span>
             </button>
+
+            {/* Delete — only visible to post owner */}
+            {isOwner && (
+              <button
+                onClick={() => onDelete(post.id)}
+                onMouseEnter={() => setDeleteHovered(true)}
+                onMouseLeave={() => setDeleteHovered(false)}
+                style={{
+                  display: "flex", alignItems: "center", gap: 6,
+                  background: "none", border: "none", cursor: "pointer",
+                  color: deleteHovered ? "#ca4754" : "#646669",
+                  padding: 0, marginLeft: "auto",
+                  transition: "color 0.15s",
+                }}
+                title="Delete post"
+              >
+                <TrashIcon />
+              </button>
+            )}
           </div>
 
           {/* Comments section */}
@@ -405,7 +433,6 @@ export default function Home() {
 
     setStep("loading");
 
-    // Create auth user
     const { data: authData, error: authErr } = await supabase.auth.signUp({
       email: `${username.toLowerCase()}@monkeypost.local`,
       password,
@@ -420,7 +447,6 @@ export default function Home() {
     const uid = authData.user.id;
     let pfp_url: string | null = null;
 
-    // Upload pfp
     if (pfpFile) {
       const ext = pfpFile.name.split(".").pop();
       const { data: uploadData } = await supabase.storage
@@ -432,7 +458,6 @@ export default function Home() {
       }
     }
 
-    // Save profile
     await supabase.from("profiles").upsert({ id: uid, username, pfp_url });
     setCurrentUser({ id: uid, username, pfp_url });
 
@@ -440,7 +465,7 @@ export default function Home() {
     setStep("app");
   }
 
-  // Log in (returning users)
+  // Log in
   async function handleLogin() {
     setSignupError("");
     if (!username.trim() || !password) {
@@ -546,6 +571,18 @@ export default function Home() {
       prev.map((p) => p.id === postId ? { ...p, bookmarked_by: newBookmarkedBy } : p)
     );
     await supabase.from("posts").update({ bookmarked_by: newBookmarkedBy }).eq("id", postId);
+  }
+
+  // Delete
+  async function handleDelete(postId: string) {
+    if (!currentUser) return;
+    const post = posts.find((p) => p.id === postId);
+    // Safety guard: only allow owner to delete
+    if (!post || post.user_id !== currentUser.id) return;
+    // Optimistically remove from local state (clears it from bookmarks view too)
+    setPosts((prev) => prev.filter((p) => p.id !== postId));
+    // Delete the row — since bookmarked_by lives on the post, it's gone for everyone automatically
+    await supabase.from("posts").delete().eq("id", postId);
   }
 
   const visiblePosts =
@@ -743,7 +780,6 @@ export default function Home() {
           fontFamily: "var(--font-roboto-mono), monospace",
         }}
       >
-        {/* Topbar */}
         <div style={{ width: "100%", padding: "20px 32px", borderBottom: "1px solid #3a3d42" }}>
           <span style={{ fontSize: 22, fontWeight: 700, color: "#e2b714" }}>monkeypost</span>
         </div>
@@ -903,7 +939,6 @@ export default function Home() {
 
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div style={{ display: "flex", gap: 8 }}>
-                  {/* Image attach */}
                   <input
                     ref={postImageRef}
                     type="file"
@@ -968,6 +1003,7 @@ export default function Home() {
                 currentUser={currentUser}
                 onLike={handleLike}
                 onBookmark={handleBookmark}
+                onDelete={handleDelete}
               />
             ))}
           </div>
