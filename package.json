@@ -16,6 +16,8 @@
     "@types/node": "latest",
     "@types/react": "latest",
     "@types/react-dom": "latest",
+    "@supabase/supabase-js": "latest",
+    "@supabase/ssr": "latest"
     "@tailwindcss/postcss": "latest",
     "autoprefixer": "latest",
     "postcss": "latest",
