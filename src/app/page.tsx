@@ -367,15 +367,17 @@ export default function Home() {
 
     // Create auth user
     const { data: authData, error: authErr } = await supabase.auth.signUp({
-      email: `${username.toLowerCase()}@monkeypost.local`,
+      email: `${username.toLowerCase()}@mtgoals.cc`,
       password,
     });
 
-    if (authErr || !authData.user) {
-      setStep("signup");
-      setSignupError(authErr?.message ?? "Sign up failed.");
-      return;
-    }
+if (authErr?.message?.includes("already registered")) {
+    setSignupError("Username is already taken. Try another one!");
+  } else {
+    setSignupError(authErr?.message ?? "Sign up failed.");
+  }
+  return;
+}
 
     const uid = authData.user.id;
     let pfp_url: string | null = null;
