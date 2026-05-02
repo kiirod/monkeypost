@@ -218,7 +218,9 @@ const NotificationIcon = () => (
   </svg>
 );
 
-const VERIFIED_USERS = new Set(["kiirod", "testaccount123", "miodec"]);
+// here are the users with the verified checkmark
+
+const VERIFIED_USERS = new Set(["kiirod", "testaccount123", "puppyboy", "asd"]);
 
 const OwnerBadge = () => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#e2b714" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width={16} height={16} style={{ display: "inline-block", verticalAlign: "middle", marginLeft: 4 }}>
