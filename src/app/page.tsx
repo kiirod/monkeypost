@@ -8,23 +8,124 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
+// ── Twemoji ───────────────────────────────────────────────────────────────────
+
+function getTwemojiUrl(emoji: string): string {
+  const cp = [...emoji].map((c) => c.codePointAt(0)!.toString(16)).join("-");
+  return `https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/${cp}.svg`;
+}
+
+function renderWithTwemoji(text: string): React.ReactNode[] {
+  const emojiRegex =
+    /(\p{Emoji_Presentation}|\p{Emoji}\uFE0F|\p{Emoji_Modifier_Base}(?:\p{Emoji_Modifier})?|[\u{1F1E0}-\u{1F1FF}]{2}|\u{200D})/gu;
+  const parts: React.ReactNode[] = [];
+  let last = 0;
+  let match;
+  let i = 0;
+  const regex = new RegExp(
+    /(\p{Emoji_Presentation}|\p{Extended_Pictographic})/gu
+  );
+  const str = text;
+  regex.lastIndex = 0;
+  while ((match = regex.exec(str)) !== null) {
+    if (match.index > last) {
+      parts.push(str.slice(last, match.index));
+    }
+    const em = match[0];
+    parts.push(
+      <img
+        key={i++}
+        src={getTwemojiUrl(em)}
+        alt={em}
+        style={{ width: "1.15em", height: "1.15em", display: "inline-block", verticalAlign: "-0.2em", margin: "0 0.05em" }}
+      />
+    );
+    last = match.index + em.length;
+  }
+  if (last < str.length) parts.push(str.slice(last));
+  return parts;
+}
+
+// ── Blocked words filter ──────────────────────────────────────────────────────
+
+async function loadBlockedWords(): Promise<string[]> {
+  try {
+    const res = await fetch("/blocked.json");
+    return await res.json();
+  } catch {
+    return [];
+  }
+}
+
+let _blockedWords: string[] | null = null;
+async function getBlockedWords(): Promise<string[]> {
+  if (_blockedWords) return _blockedWords;
+  _blockedWords = await loadBlockedWords();
+  return _blockedWords;
+}
+
+function normalizeText(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/0/g, "o")
+    .replace(/1/g, "i")
+    .replace(/3/g, "e")
+    .replace(/4/g, "a")
+    .replace(/5/g, "s")
+    .replace(/8/g, "b")
+    .replace(/@/g, "a")
+    .replace(/\$/g, "s")
+    .replace(/\*/g, "")
+    .replace(/[^a-z\s]/g, "");
+}
+
+async function containsBlockedWord(text: string): Promise<boolean> {
+  const blocked = await getBlockedWords();
+  const normalized = normalizeText(text);
+  const plain = text.toLowerCase().replace(/[^a-z0-9\s]/g, "");
+  for (const word of blocked) {
+    const normWord = normalizeText(word);
+    if (normalized.includes(normWord) || plain.includes(word.toLowerCase().replace(/[^a-z0-9\s]/g, ""))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// ── Strip image metadata ──────────────────────────────────────────────────────
+
+async function stripImageMetadata(file: File): Promise<File> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext("2d")!;
+      ctx.drawImage(img, 0, 0);
+      URL.revokeObjectURL(url);
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) { resolve(file); return; }
+          resolve(new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: "image/jpeg" }));
+        },
+        "image/jpeg",
+        0.92
+      );
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+    img.src = url;
+  });
+}
+
 // ── SVGs ──────────────────────────────────────────────────────────────────────
 
 const LoadingSpinner = () => (
-  <svg
-    viewBox="0 0 16 16"
-    xmlns="http://www.w3.org/2000/svg"
-    fill="none"
-    className="animate-spin"
-    style={{ animationDuration: "1.4s" }}
-    width={40}
-    height={40}
-  >
+  <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="none"
+    className="animate-spin" style={{ animationDuration: "1.4s" }} width={40} height={40}>
     <g fill="#ffffff" fillRule="evenodd" clipRule="evenodd">
-      <path
-        d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM0 8a8 8 0 1116 0A8 8 0 010 8z"
-        opacity=".2"
-      />
+      <path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM0 8a8 8 0 1116 0A8 8 0 010 8z" opacity=".2" />
       <path d="M7.25.75A.75.75 0 018 0a8 8 0 018 8 .75.75 0 01-1.5 0A6.5 6.5 0 008 1.5a.75.75 0 01-.75-.75z" />
     </g>
   </svg>
@@ -32,47 +133,29 @@ const LoadingSpinner = () => (
 
 const HeartIcon = ({ filled }: { filled?: boolean }) => (
   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width={18} height={18}>
-    <path
-      d="M15.7 4C18.87 4 21 6.98 21 9.76C21 15.39 12.16 20 12 20C11.84 20 3 15.39 3 9.76C3 6.98 5.13 4 8.3 4C10.12 4 11.31 4.91 12 5.71C12.69 4.91 13.88 4 15.7 4Z"
-      stroke="#ffffff"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      fill={filled ? "#ffffff" : "none"}
-    />
+    <path d="M15.7 4C18.87 4 21 6.98 21 9.76C21 15.39 12.16 20 12 20C11.84 20 3 15.39 3 9.76C3 6.98 5.13 4 8.3 4C10.12 4 11.31 4.91 12 5.71C12.69 4.91 13.88 4 15.7 4Z"
+      stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill={filled ? "#ffffff" : "none"} />
   </svg>
 );
 
 const BookmarkIcon = ({ filled }: { filled?: boolean }) => (
-  <svg viewBox="-4 0 30 30" version="1.1" xmlns="http://www.w3.org/2000/svg" width={18} height={18}>
-    <g fill={filled ? "#ffffff" : "none"} stroke="#ffffff" strokeWidth={filled ? 0 : 1.5}>
-      <path d="M437,153 L423,153 C420.791,153 419,154.791 419,157 L419,179 C419,181.209 420.791,183 423,183 L430,176 L437,183 C439.209,183 441,181.209 441,179 L441,157 C441,154.791 439.209,153 437,153" transform="translate(-419, -153)" fill={filled ? "#ffffff" : "none"} />
-    </g>
-    <path d="M5 3h12a1 1 0 011 1v20l-7-5-7 5V4a1 1 0 011-1z" fill={filled ? "#ffffff" : "none"} stroke="#ffffff" strokeWidth="1.5" strokeLinejoin="round" />
+  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width={18} height={18}>
+    <path d="M5 3h14a1 1 0 011 1v18l-8-5.5L4 22V4a1 1 0 011-1z"
+      fill={filled ? "#ffffff" : "none"} stroke="#ffffff" strokeWidth="1.5" strokeLinejoin="round" />
   </svg>
 );
 
 const CommentIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width={18} height={18}>
-    <path
-      d="M7 9H17M7 13H12M21 20L17.6757 18.3378C17.4237 18.2118 17.2977 18.1488 17.1656 18.1044C17.0484 18.065 16.9277 18.0365 16.8052 18.0193C16.6672 18 16.5263 18 16.2446 18H6.2C5.07989 18 4.51984 18 4.09202 17.782C3.71569 17.5903 3.40973 17.2843 3.21799 16.908C3 16.4802 3 15.9201 3 14.8V7.2C3 6.07989 3 5.51984 3.21799 5.09202C3.40973 4.71569 3.71569 4.40973 4.09202 4.21799C4.51984 4 5.0799 4 6.2 4H17.8C18.9201 4 19.4802 4 19.908 4.21799C20.2843 4.40973 20.5903 4.71569 20.782 5.09202C21 5.51984 21 6.0799 21 7.2V20Z"
-      stroke="#ffffff"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
+    <path d="M7 9H17M7 13H12M21 20L17.6757 18.3378C17.4237 18.2118 17.2977 18.1488 17.1656 18.1044C17.0484 18.065 16.9277 18.0365 16.8052 18.0193C16.6672 18 16.5263 18 16.2446 18H6.2C5.07989 18 4.51984 18 4.09202 17.782C3.71569 17.5903 3.40973 17.2843 3.21799 16.908C3 16.4802 3 15.9201 3 14.8V7.2C3 6.07989 3 5.51984 3.21799 5.09202C3.40973 4.71569 3.71569 4.40973 4.09202 4.21799C4.51984 4 5.0799 4 6.2 4H17.8C18.9201 4 19.4802 4 19.908 4.21799C20.2843 4.40973 20.5903 4.71569 20.782 5.09202C21 5.51984 21 6.0799 21 7.2V20Z"
+      stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 );
 
 const ImageIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width={20} height={20}>
-    <path
-      d="M14.2639 15.9375L12.5958 14.2834C11.7909 13.4851 11.3884 13.086 10.9266 12.9401C10.5204 12.8118 10.0838 12.8165 9.68048 12.9536C9.22188 13.1095 8.82814 13.5172 8.04068 14.3326L4.04409 18.2801M14.2639 15.9375L14.6053 15.599C15.4112 14.7998 15.8141 14.4002 16.2765 14.2543C16.6831 14.126 17.12 14.1311 17.5236 14.2687C17.9824 14.4251 18.3761 14.8339 19.1634 15.6514L20 16.4934M14.2639 15.9375L18.275 19.9565M18.275 19.9565C17.9176 20 17.4543 20 16.8 20H7.2C6.07989 20 5.51984 20 5.09202 19.782C4.71569 19.5903 4.40973 19.2843 4.21799 18.908C4.12796 18.7313 4.07512 18.5321 4.04409 18.2801M18.275 19.9565C18.5293 19.9256 18.7301 19.8727 18.908 19.782C19.2843 19.5903 19.5903 19.2843 19.782 18.908C20 18.4802 20 17.9201 20 16.8V16.4934M4.04409 18.2801C4 17.9221 4 17.4575 4 16.8V7.2C4 6.0799 4 5.51984 4.21799 5.09202C4.40973 4.71569 4.71569 4.40973 5.09202 4.21799C5.51984 4 6.07989 4 7.2 4H16.8C17.9201 4 18.4802 4 18.908 4.21799C19.2843 4.40973 19.5903 4.71569 19.782 5.09202C20 5.51984 20 6.0799 20 7.2V16.4934M17 8.99989C17 10.1045 16.1046 10.9999 15 10.9999C13.8954 10.9999 13 10.1045 13 8.99989C13 7.89532 13.8954 6.99989 15 6.99989C16.1046 6.99989 17 7.89532 17 8.99989Z"
-      stroke="#ffffff"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
+    <path d="M14.2639 15.9375L12.5958 14.2834C11.7909 13.4851 11.3884 13.086 10.9266 12.9401C10.5204 12.8118 10.0838 12.8165 9.68048 12.9536C9.22188 13.1095 8.82814 13.5172 8.04068 14.3326L4.04409 18.2801M14.2639 15.9375L14.6053 15.599C15.4112 14.7998 15.8141 14.4002 16.2765 14.2543C16.6831 14.126 17.12 14.1311 17.5236 14.2687C17.9824 14.4251 18.3761 14.8339 19.1634 15.6514L20 16.4934M14.2639 15.9375L18.275 19.9565M18.275 19.9565C17.9176 20 17.4543 20 16.8 20H7.2C6.07989 20 5.51984 20 5.09202 19.782C4.71569 19.5903 4.40973 19.2843 4.21799 18.908C4.12796 18.7313 4.07512 18.5321 4.04409 18.2801M18.275 19.9565C18.5293 19.9256 18.7301 19.8727 18.908 19.782C19.2843 19.5903 19.5903 19.2843 19.782 18.908C20 18.4802 20 17.9201 20 16.8V16.4934M4.04409 18.2801C4 17.9221 4 17.4575 4 16.8V7.2C4 6.0799 4 5.51984 4.21799 5.09202C4.40973 4.71569 4.71569 4.40973 5.09202 4.21799C5.51984 4 6.07989 4 7.2 4H16.8C17.9201 4 18.4802 4 18.908 4.21799C19.2843 4.40973 19.5903 4.71569 19.782 5.09202C20 5.51984 20 6.0799 20 7.2V16.4934M17 8.99989C17 10.1045 16.1046 10.9999 15 10.9999C13.8954 10.9999 13 10.1045 13 8.99989C13 7.89532 13.8954 6.99989 15 6.99989C16.1046 6.99989 17 7.89532 17 8.99989Z"
+      stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 );
 
@@ -97,11 +180,44 @@ const SupportIcon = () => (
 const TrashIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width={16} height={16}>
     <path d="M3 6H5H21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    <path d="M8 6V4C8 3.46957 8.21071 2.96086 8.58579 2.58579C8.96086 2.21071 9.46957 2 10 2H14C14.5304 2 15.0391 2.21071 15.4142 2.58579C15.7893 2.96086 16 3.46957 16 4V6M19 6L18.1168 19.1042C18.0504 20.1554 17.1886 21 16.135 21H7.86502C6.81138 21 5.94962 20.1554 5.88316 19.1042L5 6H19Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M8 6V4C8 3.46957 8.21071 2.96086 8.58579 2.58579C8.96086 2.21071 9.46957 2 10 2H14C14.5304 2 15.0391 2.21071 15.4142 2.58579C15.7893 2.96086 16 3.46957 16 4V6M19 6L18.1168 19.1042C18.0504 20.1554 17.1886 21 16.135 21H7.86502C6.81138 21 5.94962 20.1554 5.88316 19.1042L5 6H19Z"
+      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+const EditIcon = () => (
+  <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" width={16} height={16}>
+    <path d="M8.29289 3.70711L1 11V15H5L12.2929 7.70711L8.29289 3.70711Z" fill="currentColor" />
+    <path d="M9.70711 2.29289L13.7071 6.29289L15.1716 4.82843C15.702 4.29799 16 3.57857 16 2.82843C16 1.26633 14.7337 0 13.1716 0C12.4214 0 11.702 0.297995 11.1716 0.828428L9.70711 2.29289Z" fill="currentColor" />
+  </svg>
+);
+
+const DownloadIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width={20} height={20}>
+    <path d="M12.5535 16.5061C12.4114 16.6615 12.2106 16.75 12 16.75C11.7894 16.75 11.5886 16.6615 11.4465 16.5061L7.44648 12.1311C7.16698 11.8254 7.18822 11.351 7.49392 11.0715C7.79963 10.792 8.27402 10.8132 8.55352 11.1189L11.25 14.0682V3C11.25 2.58579 11.5858 2.25 12 2.25C12.4142 2.25 12.75 2.58579 12.75 3V14.0682L15.4465 11.1189C15.726 10.8132 16.2004 10.792 16.5061 11.0715C16.8118 11.351 16.833 11.8254 16.5535 12.1311L12.5535 16.5061Z" fill="#ffffff" />
+    <path d="M3.75 15C3.75 14.5858 3.41422 14.25 3 14.25C2.58579 14.25 2.25 14.5858 2.25 15V15.0549C2.24998 16.4225 2.24996 17.5248 2.36652 18.3918C2.48754 19.2919 2.74643 20.0497 3.34835 20.6516C3.95027 21.2536 4.70814 21.5125 5.60825 21.6335C6.47522 21.75 7.57754 21.75 8.94513 21.75H15.0549C16.4225 21.75 17.5248 21.75 18.3918 21.6335C19.2919 21.5125 20.0497 21.2536 20.6517 20.6516C21.2536 20.0497 21.5125 19.2919 21.6335 18.3918C21.75 17.5248 21.75 16.4225 21.75 15.0549V15C21.75 14.5858 21.4142 14.25 21 14.25C20.5858 14.25 20.25 14.5858 20.25 15C20.25 16.4354 20.2484 17.4365 20.1469 18.1919C20.0482 18.9257 19.8678 19.3142 19.591 19.591C19.3142 19.8678 18.9257 20.0482 18.1919 20.1469C17.4365 20.2484 16.4354 20.25 15 20.25H9C7.56459 20.25 6.56347 20.2484 5.80812 20.1469C5.07435 20.0482 4.68577 19.8678 4.40901 19.591C4.13225 19.3142 3.9518 18.9257 3.85315 18.1919C3.75159 17.4365 3.75 16.4354 3.75 15Z" fill="#ffffff" />
   </svg>
 );
 
 // ── Types ─────────────────────────────────────────────────────────────────────
+
+interface Reply {
+  id: string;
+  username: string;
+  pfp_url: string | null;
+  content: string;
+  created_at: string;
+  replies?: Reply[];
+}
+
+interface Comment {
+  id: string;
+  username: string;
+  pfp_url: string | null;
+  content: string;
+  created_at: string;
+  replies?: Reply[];
+}
 
 interface Post {
   id: string;
@@ -115,14 +231,7 @@ interface Post {
   bookmarked_by: string[];
   comments: Comment[];
   created_at: string;
-}
-
-interface Comment {
-  id: string;
-  username: string;
-  pfp_url: string | null;
-  content: string;
-  created_at: string;
+  edited?: boolean;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -130,31 +239,202 @@ interface Comment {
 function Avatar({ url, username, size = 36 }: { url: string | null; username: string; size?: number }) {
   const initials = username?.slice(0, 2).toUpperCase() ?? "??";
   if (url) {
-    return (
-      <img
-        src={url}
-        alt={username}
-        style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }}
-      />
-    );
+    return <img src={url} alt={username}
+      style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />;
   }
   return (
-    <div
-      style={{
-        width: size,
-        height: size,
-        borderRadius: "50%",
-        background: "#646669",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        fontSize: size * 0.35,
-        fontWeight: 700,
-        flexShrink: 0,
-        color: "#fff",
-      }}
-    >
+    <div style={{
+      width: size, height: size, borderRadius: "50%", background: "#646669",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      fontSize: size * 0.35, fontWeight: 700, flexShrink: 0, color: "#fff",
+    }}>
       {initials}
+    </div>
+  );
+}
+
+// ── Hoverable image with download button ──────────────────────────────────────
+
+function HoverableImage({ src, alt, style }: { src: string; alt: string; style?: React.CSSProperties }) {
+  const [hovered, setHovered] = useState(false);
+
+  async function handleDownload() {
+    try {
+      const res = await fetch(src);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "monkeypost-image.jpg";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      window.open(src, "_blank");
+    }
+  }
+
+  return (
+    <div style={{ position: "relative", display: "inline-block", width: "100%" }}
+      onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
+      <img src={src} alt={alt} style={style} />
+      {hovered && (
+        <button onClick={handleDownload}
+          title="Download image"
+          style={{
+            position: "absolute", top: 8, left: 8,
+            background: "#323437cc",
+            border: "none", borderRadius: 6,
+            width: 34, height: 34, cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            transition: "background 0.15s",
+          }}>
+          <DownloadIcon />
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ── Reply Tree ────────────────────────────────────────────────────────────────
+
+function ReplyItem({
+  reply,
+  depth,
+  currentUser,
+  postId,
+  commentId,
+  replyPath,
+  onUpdate,
+}: {
+  reply: Reply;
+  depth: number;
+  currentUser: { id: string; username: string; pfp_url: string | null } | null;
+  postId: string;
+  commentId: string;
+  replyPath: number[];
+  onUpdate: (updatedComments: Comment[]) => void;
+}) {
+  const [showReplyInput, setShowReplyInput] = useState(false);
+  const [replyText, setReplyText] = useState("");
+  const [replyError, setReplyError] = useState("");
+  const isOwner = currentUser?.username === reply.username;
+
+  async function submitNestedReply() {
+    if (!replyText.trim() || !currentUser) return;
+    const blocked = await containsBlockedWord(replyText);
+    if (blocked) { setReplyError("Your message has a word that is disallowed."); return; }
+    setReplyError("");
+
+    const newReply: Reply = {
+      id: crypto.randomUUID(),
+      username: currentUser.username,
+      pfp_url: currentUser.pfp_url,
+      content: replyText.trim(),
+      created_at: new Date().toISOString(),
+      replies: [],
+    };
+
+    const { data: postData } = await supabase.from("posts").select("comments").eq("id", postId).single();
+    if (!postData) return;
+    const comments: Comment[] = postData.comments ?? [];
+
+    function insertReply(list: Reply[], path: number[]): Reply[] {
+      if (path.length === 0) return [...list, newReply];
+      return list.map((r, i) =>
+        i === path[0]
+          ? { ...r, replies: insertReply(r.replies ?? [], path.slice(1)) }
+          : r
+      );
+    }
+
+    const updated = comments.map((c) =>
+      c.id === commentId
+        ? { ...c, replies: insertReply(c.replies ?? [], replyPath) }
+        : c
+    );
+
+    await supabase.from("posts").update({ comments: updated }).eq("id", postId);
+    onUpdate(updated);
+    setReplyText("");
+    setShowReplyInput(false);
+  }
+
+  async function deleteNestedReply() {
+    if (!isOwner) return;
+    const { data: postData } = await supabase.from("posts").select("comments").eq("id", postId).single();
+    if (!postData) return;
+    const comments: Comment[] = postData.comments ?? [];
+
+    function removeReply(list: Reply[], path: number[]): Reply[] {
+      if (path.length === 1) return list.filter((_, i) => i !== path[0]);
+      return list.map((r, i) =>
+        i === path[0] ? { ...r, replies: removeReply(r.replies ?? [], path.slice(1)) } : r
+      );
+    }
+
+    const updated = comments.map((c) =>
+      c.id === commentId
+        ? { ...c, replies: removeReply(c.replies ?? [], replyPath) }
+        : c
+    );
+
+    await supabase.from("posts").update({ comments: updated }).eq("id", postId);
+    onUpdate(updated);
+  }
+
+  const fontSize = depth >= 2 ? 12 : 13;
+  const avatarSize = depth >= 2 ? 20 : 24;
+
+  return (
+    <div style={{ marginLeft: depth > 0 ? 16 : 0, marginTop: 6 }}>
+      <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+        <Avatar url={reply.pfp_url} username={reply.username} size={avatarSize} />
+        <div style={{ flex: 1 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ color: "#e2b714", fontSize: fontSize - 1, fontWeight: 700 }}>@{reply.username}</span>
+            <span style={{ color: "#d1d0c5", fontSize }}>
+              {renderWithTwemoji(reply.content)}
+            </span>
+          </div>
+          <div style={{ display: "flex", gap: 10, marginTop: 3 }}>
+            {currentUser && depth < 4 && (
+              <button onClick={() => setShowReplyInput((v) => !v)}
+                style={{ background: "none", border: "none", color: "#646669", fontSize: 11, cursor: "pointer", padding: 0 }}>
+                reply
+              </button>
+            )}
+            {isOwner && (
+              <button onClick={deleteNestedReply}
+                style={{ background: "none", border: "none", color: "#646669", fontSize: 11, cursor: "pointer", padding: 0 }}>
+                delete
+              </button>
+            )}
+          </div>
+          {showReplyInput && (
+            <div style={{ marginTop: 6 }}>
+              <div style={{ display: "flex", gap: 6 }}>
+                <input value={replyText} onChange={(e) => setReplyText(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && submitNestedReply()}
+                  placeholder="Reply..." maxLength={180}
+                  style={{
+                    flex: 1, background: "#3a3d42", border: "none", borderRadius: 6,
+                    padding: "6px 10px", color: "#fff", fontSize: 12, fontFamily: "inherit", outline: "none",
+                  }} />
+                <button onClick={submitNestedReply}
+                  style={{
+                    background: "#e2b714", border: "none", borderRadius: 6,
+                    padding: "6px 10px", color: "#323437", fontWeight: 700, fontSize: 12, cursor: "pointer", fontFamily: "inherit",
+                  }}>↵</button>
+              </div>
+              {replyError && <div style={{ color: "#ca4754", fontSize: 11, marginTop: 4 }}>{replyError}</div>}
+            </div>
+          )}
+          {(reply.replies ?? []).map((r, i) => (
+            <ReplyItem key={r.id} reply={r} depth={depth + 1} currentUser={currentUser}
+              postId={postId} commentId={commentId} replyPath={[...replyPath, i]} onUpdate={onUpdate} />
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -167,34 +447,44 @@ function PostCard({
   onLike,
   onBookmark,
   onDelete,
+  onEdit,
 }: {
   post: Post;
   currentUser: { id: string; username: string; pfp_url: string | null } | null;
   onLike: (id: string) => void;
   onBookmark: (id: string) => void;
   onDelete: (id: string) => void;
+  onEdit: (id: string, newContent: string) => void;
 }) {
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState("");
+  const [commentError, setCommentError] = useState("");
   const [localComments, setLocalComments] = useState<Comment[]>(post.comments ?? []);
   const [deleteHovered, setDeleteHovered] = useState(false);
+  const [editHovered, setEditHovered] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editText, setEditText] = useState(post.content);
+  const [editError, setEditError] = useState("");
 
-  useEffect(() => {
-    setLocalComments(post.comments ?? []);
-  }, [post.comments]);
+  useEffect(() => { setLocalComments(post.comments ?? []); }, [post.comments]);
 
   const liked = currentUser ? post.liked_by?.includes(currentUser.id) : false;
   const bookmarked = currentUser ? post.bookmarked_by?.includes(currentUser.id) : false;
   const isOwner = currentUser?.id === post.user_id;
+  const canEdit = isOwner && !post.edited;
 
   async function submitComment() {
     if (!commentText.trim() || !currentUser) return;
+    const blocked = await containsBlockedWord(commentText);
+    if (blocked) { setCommentError("Your message has a word that is disallowed."); return; }
+    setCommentError("");
     const newComment: Comment = {
       id: crypto.randomUUID(),
       username: currentUser.username,
       pfp_url: currentUser.pfp_url,
       content: commentText.trim(),
       created_at: new Date().toISOString(),
+      replies: [],
     };
     const updatedComments = [...localComments, newComment];
     setLocalComments(updatedComments);
@@ -202,138 +492,187 @@ function PostCard({
     await supabase.from("posts").update({ comments: updatedComments }).eq("id", post.id);
   }
 
+  async function deleteComment(commentId: string, commentUsername: string) {
+    if (!currentUser || currentUser.username !== commentUsername) return;
+    const updated = localComments.filter((c) => c.id !== commentId);
+    setLocalComments(updated);
+    await supabase.from("posts").update({ comments: updated }).eq("id", post.id);
+  }
+
+  async function submitEdit() {
+    if (!editText.trim() || !currentUser || post.edited) return;
+    const blocked = await containsBlockedWord(editText);
+    if (blocked) { setEditError("Your message has a word that is disallowed."); return; }
+    setEditError("");
+    onEdit(post.id, editText.trim());
+    setEditing(false);
+  }
+
+  function handleCommentsUpdate(updated: Comment[]) {
+    setLocalComments(updated);
+  }
+
   return (
-    <div
-      style={{
-        background: "#2c2e31",
-        borderRadius: 12,
-        padding: "16px 20px",
-        marginBottom: 12,
-        border: "1px solid #3a3d42",
-      }}
-    >
+    <div style={{ background: "#2c2e31", borderRadius: 12, padding: "16px 20px", marginBottom: 12, border: "1px solid #3a3d42" }}>
       <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
         <Avatar url={post.pfp_url} username={post.username} size={40} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ marginBottom: 4 }}>
-            <span style={{ color: "#e2b714", fontWeight: 700, fontSize: 14 }}>
-              @{post.username}
-            </span>
+            <span style={{ color: "#e2b714", fontWeight: 700, fontSize: 14 }}>@{post.username}</span>
             {post.username.toLowerCase() === "kiirod" && (
-              <div style={{ color: "#e2b714", opacity: 0.5, fontSize: 11, marginTop: 1 }}>
-                Owner
-              </div>
+              <div style={{ color: "#e2b714", opacity: 0.5, fontSize: 11, marginTop: 1 }}>Owner</div>
             )}
           </div>
-          <div style={{ fontSize: 15, lineHeight: 1.5, wordBreak: "break-word", color: "#d1d0c5" }}>
-            {post.content}
-          </div>
-          {post.image_url && (
-            <img
-              src={post.image_url}
-              alt="post"
-              style={{ marginTop: 10, maxWidth: "100%", borderRadius: 8, maxHeight: 320, objectFit: "cover" }}
-            />
+
+          {editing ? (
+            <div>
+              <textarea value={editText} onChange={(e) => setEditText(e.target.value.slice(0, 180))}
+                rows={3} maxLength={180}
+                style={{
+                  width: "100%", background: "#3a3d42", border: "1px solid #646669",
+                  borderRadius: 8, color: "#d1d0c5", fontSize: 15, fontFamily: "inherit",
+                  resize: "none", outline: "none", lineHeight: 1.5, padding: "8px 12px", boxSizing: "border-box",
+                }} />
+              {editError && <div style={{ color: "#ca4754", fontSize: 12, marginTop: 4 }}>{editError}</div>}
+              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                <button onClick={submitEdit}
+                  style={{
+                    background: "#e2b714", border: "none", borderRadius: 6, padding: "6px 14px",
+                    color: "#323437", fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit",
+                  }}>Save</button>
+                <button onClick={() => { setEditing(false); setEditText(post.content); setEditError(""); }}
+                  style={{
+                    background: "#3a3d42", border: "none", borderRadius: 6, padding: "6px 14px",
+                    color: "#d1d0c5", fontSize: 13, cursor: "pointer", fontFamily: "inherit",
+                  }}>Cancel</button>
+              </div>
+            </div>
+          ) : (
+            <div style={{ fontSize: 15, lineHeight: 1.5, wordBreak: "break-word", color: "#d1d0c5" }}>
+              {renderWithTwemoji(post.content)}
+              {post.edited && (
+                <span style={{ opacity: 0.5, fontSize: 12, marginLeft: 6 }}>(edited)</span>
+              )}
+            </div>
           )}
 
-          {/* Action buttons */}
+          {post.image_url && (
+            <div style={{ marginTop: 10 }}>
+              <HoverableImage src={post.image_url} alt="post"
+                style={{ maxWidth: "100%", borderRadius: 8, maxHeight: 320, objectFit: "cover", display: "block" }} />
+            </div>
+          )}
+
+          {/* Actions */}
           <div style={{ display: "flex", gap: 20, marginTop: 12, alignItems: "center" }}>
-            {/* Like */}
-            <button
-              onClick={() => onLike(post.id)}
+            <button onClick={() => onLike(post.id)}
               style={{
-                display: "flex", alignItems: "center", gap: 6,
-                background: "none", border: "none", cursor: "pointer",
-                color: liked ? "#e2b714" : "#646669", fontSize: 13, padding: 0,
-                transition: "color 0.15s",
-              }}
-            >
+                display: "flex", alignItems: "center", gap: 6, background: "none", border: "none",
+                cursor: "pointer", color: liked ? "#e2b714" : "#646669", fontSize: 13, padding: 0, transition: "color 0.15s",
+              }}>
               <HeartIcon filled={liked} />
               <span>{post.likes ?? 0}</span>
             </button>
 
-            {/* Bookmark */}
-            <button
-              onClick={() => onBookmark(post.id)}
+            <button onClick={() => onBookmark(post.id)}
               style={{
-                display: "flex", alignItems: "center", gap: 6,
-                background: "none", border: "none", cursor: "pointer",
-                color: bookmarked ? "#e2b714" : "#646669", padding: 0,
-                transition: "color 0.15s",
-              }}
-            >
+                display: "flex", alignItems: "center", gap: 6, background: "none", border: "none",
+                cursor: "pointer", color: bookmarked ? "#e2b714" : "#646669", padding: 0, transition: "color 0.15s",
+              }}>
               <BookmarkIcon filled={bookmarked} />
             </button>
 
-            {/* Comment */}
-            <button
-              onClick={() => setShowComments((v) => !v)}
+            <button onClick={() => setShowComments((v) => !v)}
               style={{
-                display: "flex", alignItems: "center", gap: 6,
-                background: "none", border: "none", cursor: "pointer",
-                color: "#646669", padding: 0, transition: "color 0.15s",
-              }}
-            >
+                display: "flex", alignItems: "center", gap: 6, background: "none", border: "none",
+                cursor: "pointer", color: "#646669", padding: 0, transition: "color 0.15s",
+              }}>
               <CommentIcon />
               <span style={{ fontSize: 13 }}>{localComments.length}</span>
             </button>
 
-            {/* Delete — only visible to post owner */}
             {isOwner && (
-              <button
-                onClick={() => onDelete(post.id)}
-                onMouseEnter={() => setDeleteHovered(true)}
-                onMouseLeave={() => setDeleteHovered(false)}
-                style={{
-                  display: "flex", alignItems: "center", gap: 6,
-                  background: "none", border: "none", cursor: "pointer",
-                  color: deleteHovered ? "#ca4754" : "#646669",
-                  padding: 0, marginLeft: "auto",
-                  transition: "color 0.15s",
-                }}
-                title="Delete post"
-              >
-                <TrashIcon />
-              </button>
+              <div style={{ display: "flex", gap: 8, marginLeft: "auto", alignItems: "center" }}>
+                {canEdit && (
+                  <button onClick={() => setEditing(true)}
+                    onMouseEnter={() => setEditHovered(true)}
+                    onMouseLeave={() => setEditHovered(false)}
+                    title="Edit post (once only)"
+                    style={{
+                      display: "flex", alignItems: "center", background: "none", border: "none",
+                      cursor: "pointer", color: editHovered ? "#e2b714" : "#646669",
+                      padding: 0, transition: "color 0.15s",
+                    }}>
+                    <EditIcon />
+                  </button>
+                )}
+                <button onClick={() => onDelete(post.id)}
+                  onMouseEnter={() => setDeleteHovered(true)}
+                  onMouseLeave={() => setDeleteHovered(false)}
+                  title="Delete post"
+                  style={{
+                    display: "flex", alignItems: "center", background: "none", border: "none",
+                    cursor: "pointer", color: deleteHovered ? "#ca4754" : "#646669",
+                    padding: 0, transition: "color 0.15s",
+                  }}>
+                  <TrashIcon />
+                </button>
+              </div>
             )}
           </div>
 
-          {/* Comments section */}
+          {/* Comments */}
           {showComments && (
             <div style={{ marginTop: 12 }}>
-              {localComments.map((c) => (
-                <div key={c.id} style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "flex-start" }}>
-                  <Avatar url={c.pfp_url} username={c.username} size={26} />
-                  <div>
-                    <span style={{ color: "#e2b714", fontSize: 12, fontWeight: 700 }}>@{c.username} </span>
-                    <span style={{ color: "#d1d0c5", fontSize: 13 }}>{c.content}</span>
+              {localComments.map((c, ci) => (
+                <div key={c.id} style={{ marginBottom: 10 }}>
+                  <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                    <Avatar url={c.pfp_url} username={c.username} size={26} />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ color: "#e2b714", fontSize: 12, fontWeight: 700 }}>@{c.username}</span>
+                        <span style={{ color: "#d1d0c5", fontSize: 13 }}>{renderWithTwemoji(c.content)}</span>
+                      </div>
+                      <div style={{ display: "flex", gap: 10, marginTop: 3 }}>
+                        {currentUser && (
+                          <CommentReplyButton postId={post.id} commentId={c.id} commentIndex={ci}
+                            currentUser={currentUser} localComments={localComments}
+                            onUpdate={handleCommentsUpdate} />
+                        )}
+                        {currentUser?.username === c.username && (
+                          <button onClick={() => deleteComment(c.id, c.username)}
+                            style={{ background: "none", border: "none", color: "#646669", fontSize: 11, cursor: "pointer", padding: 0 }}>
+                            delete
+                          </button>
+                        )}
+                      </div>
+                      {(c.replies ?? []).map((r, ri) => (
+                        <ReplyItem key={r.id} reply={r} depth={1} currentUser={currentUser}
+                          postId={post.id} commentId={c.id} replyPath={[ri]} onUpdate={handleCommentsUpdate} />
+                      ))}
+                    </div>
                   </div>
                 </div>
               ))}
+
               {currentUser && (
-                <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                  <input
-                    value={commentText}
-                    onChange={(e) => setCommentText(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && submitComment()}
-                    placeholder="Write a reply..."
-                    maxLength={180}
-                    style={{
-                      flex: 1, background: "#3a3d42", border: "none", borderRadius: 8,
-                      padding: "8px 12px", color: "#fff", fontSize: 13, fontFamily: "inherit",
-                      outline: "none",
-                    }}
-                  />
-                  <button
-                    onClick={submitComment}
-                    style={{
-                      background: "#e2b714", border: "none", borderRadius: 8,
-                      padding: "8px 14px", color: "#323437", fontWeight: 700,
-                      fontSize: 13, cursor: "pointer", fontFamily: "inherit",
-                    }}
-                  >
-                    Reply
-                  </button>
+                <div style={{ marginTop: 8 }}>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <input value={commentText} onChange={(e) => setCommentText(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && submitComment()}
+                      placeholder="Write a reply..." maxLength={180}
+                      style={{
+                        flex: 1, background: "#3a3d42", border: "none", borderRadius: 8,
+                        padding: "8px 12px", color: "#fff", fontSize: 13, fontFamily: "inherit", outline: "none",
+                      }} />
+                    <button onClick={submitComment}
+                      style={{
+                        background: "#e2b714", border: "none", borderRadius: 8,
+                        padding: "8px 14px", color: "#323437", fontWeight: 700, fontSize: 13,
+                        cursor: "pointer", fontFamily: "inherit",
+                      }}>Reply</button>
+                  </div>
+                  {commentError && <div style={{ color: "#ca4754", fontSize: 12, marginTop: 4 }}>{commentError}</div>}
                 </div>
               )}
             </div>
@@ -344,10 +683,75 @@ function PostCard({
   );
 }
 
+// ── Inline comment reply button (to avoid hooks-in-loops) ─────────────────────
+
+function CommentReplyButton({
+  postId, commentId, commentIndex, currentUser, localComments, onUpdate,
+}: {
+  postId: string; commentId: string; commentIndex: number;
+  currentUser: { id: string; username: string; pfp_url: string | null };
+  localComments: Comment[];
+  onUpdate: (updated: Comment[]) => void;
+}) {
+  const [show, setShow] = useState(false);
+  const [text, setText] = useState("");
+  const [error, setError] = useState("");
+
+  async function submit() {
+    if (!text.trim()) return;
+    const blocked = await containsBlockedWord(text);
+    if (blocked) { setError("Your message has a word that is disallowed."); return; }
+    setError("");
+    const newReply: Reply = {
+      id: crypto.randomUUID(),
+      username: currentUser.username,
+      pfp_url: currentUser.pfp_url,
+      content: text.trim(),
+      created_at: new Date().toISOString(),
+      replies: [],
+    };
+    const updated = localComments.map((c, i) =>
+      i === commentIndex ? { ...c, replies: [...(c.replies ?? []), newReply] } : c
+    );
+    await supabase.from("posts").update({ comments: updated }).eq("id", postId);
+    onUpdate(updated);
+    setText("");
+    setShow(false);
+  }
+
+  return (
+    <>
+      <button onClick={() => setShow((v) => !v)}
+        style={{ background: "none", border: "none", color: "#646669", fontSize: 11, cursor: "pointer", padding: 0 }}>
+        reply
+      </button>
+      {show && (
+        <div style={{ marginTop: 6, width: "100%" }}>
+          <div style={{ display: "flex", gap: 6 }}>
+            <input value={text} onChange={(e) => setText(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && submit()}
+              placeholder="Reply..." maxLength={180}
+              style={{
+                flex: 1, background: "#3a3d42", border: "none", borderRadius: 6,
+                padding: "6px 10px", color: "#fff", fontSize: 12, fontFamily: "inherit", outline: "none",
+              }} />
+            <button onClick={submit}
+              style={{
+                background: "#e2b714", border: "none", borderRadius: 6,
+                padding: "6px 10px", color: "#323437", fontWeight: 700, fontSize: 12,
+                cursor: "pointer", fontFamily: "inherit",
+              }}>↵</button>
+          </div>
+          {error && <div style={{ color: "#ca4754", fontSize: 11, marginTop: 4 }}>{error}</div>}
+        </div>
+      )}
+    </>
+  );
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export default function Home() {
-  // Auth state
   const [step, setStep] = useState<"signup" | "loading" | "app">("loading");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -356,30 +760,26 @@ export default function Home() {
   const [signupError, setSignupError] = useState("");
   const [authMode, setAuthMode] = useState<"signup" | "login">("signup");
 
-  // App state
   const [currentUser, setCurrentUser] = useState<{ id: string; username: string; pfp_url: string | null } | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
   const [view, setView] = useState<"posts" | "bookmarks">("posts");
 
-  // New post
   const [postText, setPostText] = useState("");
+  const [postError, setPostError] = useState("");
   const [postImageFile, setPostImageFile] = useState<File | null>(null);
   const [postImagePreview, setPostImagePreview] = useState<string | null>(null);
   const [posting, setPosting] = useState(false);
 
+  const [userHovered, setUserHovered] = useState(false);
+
   const pfpInputRef = useRef<HTMLInputElement>(null);
   const postImageRef = useRef<HTMLInputElement>(null);
 
-  // Restore session on mount
   useEffect(() => {
     async function restoreSession() {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", session.user.id)
-          .single();
+        const { data: profile } = await supabase.from("profiles").select("*").eq("id", session.user.id).single();
         if (profile) {
           setCurrentUser({ id: session.user.id, username: profile.username, pfp_url: profile.pfp_url });
           await loadPostsInner();
@@ -393,20 +793,13 @@ export default function Home() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Load posts
   async function loadPostsInner() {
-    const { data } = await supabase
-      .from("posts")
-      .select("*")
-      .order("created_at", { ascending: false });
+    const { data } = await supabase.from("posts").select("*").order("created_at", { ascending: false });
     if (data) setPosts(data as Post[]);
   }
 
-  async function loadPosts() {
-    await loadPostsInner();
-  }
+  async function loadPosts() { await loadPostsInner(); }
 
-  // Handle pfp file pick
   function handlePfpPick(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -414,23 +807,12 @@ export default function Home() {
     setPfpPreview(URL.createObjectURL(file));
   }
 
-  // Username validation
-  function validateUsername(val: string) {
-    return /^[a-z0-9]{1,16}$/i.test(val);
-  }
+  function validateUsername(val: string) { return /^[a-z0-9]{1,16}$/i.test(val); }
 
-  // Sign up
   async function handleSignup() {
     setSignupError("");
-    if (!validateUsername(username)) {
-      setSignupError("Username must be 1–16 chars, letters and numbers only.");
-      return;
-    }
-    if (!password || password.length < 6) {
-      setSignupError("Password must be at least 6 characters.");
-      return;
-    }
-
+    if (!validateUsername(username)) { setSignupError("Username must be 1–16 chars, letters and numbers only."); return; }
+    if (!password || password.length < 6) { setSignupError("Password must be at least 6 characters."); return; }
     setStep("loading");
 
     const { data: authData, error: authErr } = await supabase.auth.signUp({
@@ -438,20 +820,15 @@ export default function Home() {
       password,
     });
 
-    if (authErr || !authData.user) {
-      setStep("signup");
-      setSignupError(authErr?.message ?? "Sign up failed.");
-      return;
-    }
+    if (authErr || !authData.user) { setStep("signup"); setSignupError(authErr?.message ?? "Sign up failed."); return; }
 
     const uid = authData.user.id;
     let pfp_url: string | null = null;
 
     if (pfpFile) {
-      const ext = pfpFile.name.split(".").pop();
-      const { data: uploadData } = await supabase.storage
-        .from("pfps")
-        .upload(`${uid}.${ext}`, pfpFile, { upsert: true });
+      const stripped = await stripImageMetadata(pfpFile);
+      const ext = "jpg";
+      const { data: uploadData } = await supabase.storage.from("pfps").upload(`${uid}.${ext}`, stripped, { upsert: true });
       if (uploadData) {
         const { data: urlData } = supabase.storage.from("pfps").getPublicUrl(uploadData.path);
         pfp_url = urlData.publicUrl;
@@ -460,44 +837,33 @@ export default function Home() {
 
     await supabase.from("profiles").upsert({ id: uid, username, pfp_url });
     setCurrentUser({ id: uid, username, pfp_url });
-
     await loadPosts();
     setStep("app");
   }
 
-  // Log in
   async function handleLogin() {
     setSignupError("");
-    if (!username.trim() || !password) {
-      setSignupError("Please enter your username and password.");
-      return;
-    }
+    if (!username.trim() || !password) { setSignupError("Please enter your username and password."); return; }
     setStep("loading");
     const { data: authData, error: authErr } = await supabase.auth.signInWithPassword({
       email: `${username.toLowerCase()}@monkeypost.local`,
       password,
     });
-    if (authErr || !authData.user) {
-      setStep("signup");
-      setSignupError("Invalid username or password.");
-      return;
-    }
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", authData.user.id)
-      .single();
-    if (!profile) {
-      setStep("signup");
-      setSignupError("Account not found.");
-      return;
-    }
+    if (authErr || !authData.user) { setStep("signup"); setSignupError("Invalid username or password."); return; }
+    const { data: profile } = await supabase.from("profiles").select("*").eq("id", authData.user.id).single();
+    if (!profile) { setStep("signup"); setSignupError("Account not found."); return; }
     setCurrentUser({ id: authData.user.id, username: profile.username, pfp_url: profile.pfp_url });
     await loadPosts();
     setStep("app");
   }
 
-  // Handle post image pick
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    setCurrentUser(null);
+    setPosts([]);
+    setStep("signup");
+  }
+
   function handlePostImagePick(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -505,18 +871,18 @@ export default function Home() {
     setPostImagePreview(URL.createObjectURL(file));
   }
 
-  // Submit post
   async function submitPost() {
     if (!postText.trim() || !currentUser) return;
+    const blocked = await containsBlockedWord(postText);
+    if (blocked) { setPostError("Your message has a word that is disallowed."); return; }
+    setPostError("");
     setPosting(true);
 
     let image_url: string | null = null;
     if (postImageFile) {
-      const ext = postImageFile.name.split(".").pop();
-      const path = `post_${Date.now()}.${ext}`;
-      const { data: upData } = await supabase.storage
-        .from("post-images")
-        .upload(path, postImageFile);
+      const stripped = await stripImageMetadata(postImageFile);
+      const path = `post_${Date.now()}.jpg`;
+      const { data: upData } = await supabase.storage.from("post-images").upload(path, stripped);
       if (upData) {
         const { data: urlData } = supabase.storage.from("post-images").getPublicUrl(upData.path);
         image_url = urlData.publicUrl;
@@ -533,6 +899,7 @@ export default function Home() {
       liked_by: [],
       bookmarked_by: [],
       comments: [],
+      edited: false,
     });
 
     setPostText("");
@@ -542,224 +909,95 @@ export default function Home() {
     setPosting(false);
   }
 
-  // Like
   async function handleLike(postId: string) {
     if (!currentUser) return;
     const post = posts.find((p) => p.id === postId);
     if (!post) return;
     const liked = post.liked_by?.includes(currentUser.id);
-    const newLikedBy = liked
-      ? post.liked_by.filter((id) => id !== currentUser.id)
-      : [...(post.liked_by ?? []), currentUser.id];
+    const newLikedBy = liked ? post.liked_by.filter((id) => id !== currentUser.id) : [...(post.liked_by ?? []), currentUser.id];
     const newLikes = liked ? post.likes - 1 : post.likes + 1;
-    setPosts((prev) =>
-      prev.map((p) => p.id === postId ? { ...p, likes: newLikes, liked_by: newLikedBy } : p)
-    );
+    setPosts((prev) => prev.map((p) => p.id === postId ? { ...p, likes: newLikes, liked_by: newLikedBy } : p));
     await supabase.from("posts").update({ likes: newLikes, liked_by: newLikedBy }).eq("id", postId);
   }
 
-  // Bookmark
   async function handleBookmark(postId: string) {
     if (!currentUser) return;
     const post = posts.find((p) => p.id === postId);
     if (!post) return;
     const bookmarked = post.bookmarked_by?.includes(currentUser.id);
-    const newBookmarkedBy = bookmarked
-      ? post.bookmarked_by.filter((id) => id !== currentUser.id)
-      : [...(post.bookmarked_by ?? []), currentUser.id];
-    setPosts((prev) =>
-      prev.map((p) => p.id === postId ? { ...p, bookmarked_by: newBookmarkedBy } : p)
-    );
+    const newBookmarkedBy = bookmarked ? post.bookmarked_by.filter((id) => id !== currentUser.id) : [...(post.bookmarked_by ?? []), currentUser.id];
+    setPosts((prev) => prev.map((p) => p.id === postId ? { ...p, bookmarked_by: newBookmarkedBy } : p));
     await supabase.from("posts").update({ bookmarked_by: newBookmarkedBy }).eq("id", postId);
   }
 
-  // Delete
   async function handleDelete(postId: string) {
     if (!currentUser) return;
     const post = posts.find((p) => p.id === postId);
-    // Safety guard: only allow owner to delete
     if (!post || post.user_id !== currentUser.id) return;
-    // Optimistically remove from local state (clears it from bookmarks view too)
     setPosts((prev) => prev.filter((p) => p.id !== postId));
-    // Delete the row — since bookmarked_by lives on the post, it's gone for everyone automatically
     await supabase.from("posts").delete().eq("id", postId);
   }
 
-  const visiblePosts =
-    view === "bookmarks" && currentUser
-      ? posts.filter((p) => p.bookmarked_by?.includes(currentUser.id))
-      : posts;
+  async function handleEdit(postId: string, newContent: string) {
+    setPosts((prev) => prev.map((p) => p.id === postId ? { ...p, content: newContent, edited: true } : p));
+    await supabase.from("posts").update({ content: newContent, edited: true }).eq("id", postId);
+  }
 
-  // ── Render: Signup ─────────────────────────────────────────────────────────
+  const visiblePosts = view === "bookmarks" && currentUser
+    ? posts.filter((p) => p.bookmarked_by?.includes(currentUser.id))
+    : posts;
+
+  // ── Signup screen ──────────────────────────────────────────────────────────
 
   if (step === "signup") {
     return (
-      <main
-        style={{
-          minHeight: "100vh",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          background: "#323437",
-          fontFamily: "var(--font-roboto-mono), monospace",
-        }}
-      >
-        {/* Topbar */}
-        <div
-          style={{
-            width: "100%",
-            padding: "20px 32px",
-            borderBottom: "1px solid #3a3d42",
-            display: "flex",
-            alignItems: "center",
-          }}
-        >
-          <span style={{ fontSize: 22, fontWeight: 700, color: "#e2b714", letterSpacing: "-0.5px" }}>
-            monkeypost
-          </span>
+      <main style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", background: "#323437", fontFamily: "var(--font-roboto-mono), monospace" }}>
+        <div style={{ width: "100%", padding: "20px 32px", borderBottom: "1px solid #3a3d42", display: "flex", alignItems: "center" }}>
+          <span style={{ fontSize: 22, fontWeight: 700, color: "#e2b714", letterSpacing: "-0.5px" }}>monkeypost</span>
         </div>
-
-        {/* Sign up / Log in form */}
-        <div
-          style={{
-            marginTop: 60,
-            width: "100%",
-            maxWidth: 400,
-            padding: "0 24px",
-            display: "flex",
-            flexDirection: "column",
-            gap: 16,
-          }}
-        >
-          {/* Mode toggle */}
+        <div style={{ marginTop: 60, width: "100%", maxWidth: 400, padding: "0 24px", display: "flex", flexDirection: "column", gap: 16 }}>
           <div style={{ display: "flex", gap: 0, marginBottom: 4, background: "#2c2e31", borderRadius: 8, padding: 4 }}>
             {(["signup", "login"] as const).map((mode) => (
-              <button
-                key={mode}
-                onClick={() => { setAuthMode(mode); setSignupError(""); }}
+              <button key={mode} onClick={() => { setAuthMode(mode); setSignupError(""); }}
                 style={{
-                  flex: 1,
-                  padding: "8px 0",
-                  border: "none",
-                  borderRadius: 6,
+                  flex: 1, padding: "8px 0", border: "none", borderRadius: 6,
                   background: authMode === mode ? "#e2b714" : "none",
                   color: authMode === mode ? "#323437" : "#646669",
-                  fontWeight: 700,
-                  fontSize: 14,
-                  fontFamily: "inherit",
-                  cursor: "pointer",
+                  fontWeight: 700, fontSize: 14, fontFamily: "inherit", cursor: "pointer",
                   transition: "background 0.15s, color 0.15s",
-                }}
-              >
+                }}>
                 {mode === "signup" ? "Sign up" : "Log in"}
               </button>
             ))}
           </div>
 
-          <input
-            value={username}
-            onChange={(e) => {
-              const val = e.target.value.replace(/[^a-zA-Z0-9]/g, "").slice(0, 16);
-              setUsername(val);
-            }}
-            placeholder="Username"
-            maxLength={16}
-            style={{
-              background: "#2c2e31",
-              border: "1px solid #3a3d42",
-              borderRadius: 8,
-              padding: "12px 16px",
-              color: "#fff",
-              fontSize: 15,
-              fontFamily: "inherit",
-              outline: "none",
-              width: "100%",
-              boxSizing: "border-box",
-            }}
-          />
+          <input value={username} onChange={(e) => { const val = e.target.value.replace(/[^a-zA-Z0-9]/g, "").slice(0, 16); setUsername(val); }}
+            placeholder="Username" maxLength={16}
+            style={{ background: "#2c2e31", border: "1px solid #3a3d42", borderRadius: 8, padding: "12px 16px", color: "#fff", fontSize: 15, fontFamily: "inherit", outline: "none", width: "100%", boxSizing: "border-box" }} />
 
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
+          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && (authMode === "login" ? handleLogin() : handleSignup())}
             placeholder="Password"
-            style={{
-              background: "#2c2e31",
-              border: "1px solid #3a3d42",
-              borderRadius: 8,
-              padding: "12px 16px",
-              color: "#fff",
-              fontSize: 15,
-              fontFamily: "inherit",
-              outline: "none",
-              width: "100%",
-              boxSizing: "border-box",
-            }}
-          />
+            style={{ background: "#2c2e31", border: "1px solid #3a3d42", borderRadius: 8, padding: "12px 16px", color: "#fff", fontSize: 15, fontFamily: "inherit", outline: "none", width: "100%", boxSizing: "border-box" }} />
 
-          {/* Profile picture button — signup only */}
           {authMode === "signup" && (
             <>
-              <input
-                ref={pfpInputRef}
-                type="file"
-                accept=".jpeg,.jpg,.png,.gif,.avif,.webp"
-                style={{ display: "none" }}
-                onChange={handlePfpPick}
-              />
-              <button
-                onClick={() => pfpInputRef.current?.click()}
-                style={{
-                  background: "#2c2e31",
-                  border: "1px solid #3a3d42",
-                  borderRadius: 8,
-                  padding: "12px 16px",
-                  color: "#d1d0c5",
-                  fontSize: 15,
-                  fontFamily: "inherit",
-                  cursor: "pointer",
-                  textAlign: "left",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                }}
-              >
+              <input ref={pfpInputRef} type="file" accept=".jpeg,.jpg,.png,.gif,.avif,.webp" style={{ display: "none" }} onChange={handlePfpPick} />
+              <button onClick={() => pfpInputRef.current?.click()}
+                style={{ background: "#2c2e31", border: "1px solid #3a3d42", borderRadius: 8, padding: "12px 16px", color: "#d1d0c5", fontSize: 15, fontFamily: "inherit", cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", gap: 10 }}>
                 {pfpPreview ? (
-                  <>
-                    <img src={pfpPreview} alt="pfp" style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover" }} />
-                    <span style={{ color: "#e2b714" }}>Profile picture selected</span>
-                  </>
+                  <><img src={pfpPreview} alt="pfp" style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover" }} /><span style={{ color: "#e2b714" }}>Profile picture selected</span></>
                 ) : (
-                  <>
-                    <span style={{ color: "#646669" }}>📷</span>
-                    <span>Upload Profile Picture</span>
-                  </>
+                  <><span style={{ color: "#646669" }}>📷</span><span>Upload Profile Picture</span></>
                 )}
               </button>
             </>
           )}
 
-          {signupError && (
-            <div style={{ color: "#ca4754", fontSize: 13 }}>{signupError}</div>
-          )}
+          {signupError && <div style={{ color: "#ca4754", fontSize: 13 }}>{signupError}</div>}
 
-          <button
-            onClick={authMode === "login" ? handleLogin : handleSignup}
-            style={{
-              background: "#e2b714",
-              border: "none",
-              borderRadius: 8,
-              padding: "13px 16px",
-              color: "#323437",
-              fontSize: 15,
-              fontWeight: 700,
-              fontFamily: "inherit",
-              cursor: "pointer",
-              marginTop: 4,
-              transition: "opacity 0.15s",
-            }}
-          >
+          <button onClick={authMode === "login" ? handleLogin : handleSignup}
+            style={{ background: "#e2b714", border: "none", borderRadius: 8, padding: "13px 16px", color: "#323437", fontSize: 15, fontWeight: 700, fontFamily: "inherit", cursor: "pointer", marginTop: 4, transition: "opacity 0.15s" }}>
             {authMode === "login" ? "Log in!" : "Sign up!"}
           </button>
         </div>
@@ -767,19 +1005,11 @@ export default function Home() {
     );
   }
 
-  // ── Render: Loading ────────────────────────────────────────────────────────
+  // ── Loading screen ─────────────────────────────────────────────────────────
 
   if (step === "loading") {
     return (
-      <main
-        style={{
-          minHeight: "100vh",
-          display: "flex",
-          flexDirection: "column",
-          background: "#323437",
-          fontFamily: "var(--font-roboto-mono), monospace",
-        }}
-      >
+      <main style={{ minHeight: "100vh", display: "flex", flexDirection: "column", background: "#323437", fontFamily: "var(--font-roboto-mono), monospace" }}>
         <div style={{ width: "100%", padding: "20px 32px", borderBottom: "1px solid #3a3d42" }}>
           <span style={{ fontSize: 22, fontWeight: 700, color: "#e2b714" }}>monkeypost</span>
         </div>
@@ -790,53 +1020,17 @@ export default function Home() {
     );
   }
 
-  // ── Render: App ────────────────────────────────────────────────────────────
+  // ── App ────────────────────────────────────────────────────────────────────
 
   return (
-    <main
-      style={{
-        minHeight: "100vh",
-        background: "#323437",
-        fontFamily: "var(--font-roboto-mono), monospace",
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
-      {/* Topbar */}
-      <div
-        style={{
-          width: "100%",
-          padding: "16px 32px",
-          borderBottom: "1px solid #3a3d42",
-          display: "flex",
-          alignItems: "center",
-          position: "sticky",
-          top: 0,
-          background: "#323437",
-          zIndex: 10,
-        }}
-      >
-        <span style={{ fontSize: 22, fontWeight: 700, color: "#e2b714", letterSpacing: "-0.5px" }}>
-          monkeypost
-        </span>
+    <main style={{ minHeight: "100vh", background: "#323437", fontFamily: "var(--font-roboto-mono), monospace", display: "flex", flexDirection: "column" }}>
+      <div style={{ width: "100%", padding: "16px 32px", borderBottom: "1px solid #3a3d42", display: "flex", alignItems: "center", position: "sticky", top: 0, background: "#323437", zIndex: 10 }}>
+        <span style={{ fontSize: 22, fontWeight: 700, color: "#e2b714", letterSpacing: "-0.5px" }}>monkeypost</span>
       </div>
 
       <div style={{ display: "flex", flex: 1, maxWidth: 1100, margin: "0 auto", width: "100%", padding: "0 16px" }}>
-        {/* Left sidebar */}
-        <aside
-          style={{
-            width: 220,
-            flexShrink: 0,
-            padding: "32px 0",
-            display: "flex",
-            flexDirection: "column",
-            justifyContent: "flex-end",
-            position: "sticky",
-            top: 64,
-            height: "calc(100vh - 64px)",
-            paddingBottom: 32,
-          }}
-        >
+        {/* Sidebar */}
+        <aside style={{ width: 220, flexShrink: 0, padding: "32px 0", display: "flex", flexDirection: "column", justifyContent: "flex-end", position: "sticky", top: 64, height: "calc(100vh - 64px)", paddingBottom: 32 }}>
           <nav style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 24 }}>
             {[
               { label: "Posts", icon: <PostsIcon />, action: () => setView("posts") },
@@ -844,152 +1038,85 @@ export default function Home() {
               { label: "Support Developing", icon: <SupportIcon />, action: () => window.location.href = "/discord" },
               { label: "Bookmarks", icon: <BookmarkIcon filled />, action: () => setView("bookmarks") },
             ].map(({ label, icon, action }) => (
-              <button
-                key={label}
-                onClick={action}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 12,
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  color: "#d1d0c5",
-                  fontSize: 14,
-                  fontFamily: "inherit",
-                  padding: "10px 12px",
-                  borderRadius: 8,
-                  textAlign: "left",
-                  transition: "background 0.15s",
-                  width: "100%",
-                }}
+              <button key={label} onClick={action}
+                style={{ display: "flex", alignItems: "center", gap: 12, background: "none", border: "none", cursor: "pointer", color: "#d1d0c5", fontSize: 14, fontFamily: "inherit", padding: "10px 12px", borderRadius: 8, textAlign: "left", transition: "background 0.15s", width: "100%" }}
                 onMouseEnter={(e) => (e.currentTarget.style.background = "#2c2e31")}
-                onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
-              >
-                {icon}
-                <span>{label}</span>
+                onMouseLeave={(e) => (e.currentTarget.style.background = "none")}>
+                {icon}<span>{label}</span>
               </button>
             ))}
           </nav>
 
-          {/* User info */}
+          {/* User card with logout on hover */}
           {currentUser && (
-            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px" }}>
-              <Avatar url={currentUser.pfp_url} username={currentUser.username} size={36} />
-              <span style={{ color: "#e2b714", fontSize: 14, fontWeight: 700 }}>@{currentUser.username}</span>
+            <div style={{ position: "relative" }}
+              onMouseEnter={() => setUserHovered(true)}
+              onMouseLeave={() => setUserHovered(false)}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 8, background: userHovered ? "#2c2e31" : "none", transition: "background 0.15s", cursor: "default" }}>
+                <Avatar url={currentUser.pfp_url} username={currentUser.username} size={36} />
+                <span style={{ color: "#e2b714", fontSize: 14, fontWeight: 700 }}>@{currentUser.username}</span>
+              </div>
+              {userHovered && (
+                <button onClick={handleLogout}
+                  style={{
+                    position: "absolute", bottom: "calc(100% + 4px)", left: 12,
+                    background: "#ca4754", border: "none", borderRadius: 6,
+                    padding: "6px 14px", color: "#fff", fontWeight: 700,
+                    fontSize: 13, fontFamily: "inherit", cursor: "pointer",
+                    whiteSpace: "nowrap", transition: "opacity 0.15s",
+                  }}>
+                  Logout
+                </button>
+              )}
             </div>
           )}
         </aside>
 
-        {/* Main content */}
+        {/* Feed */}
         <div style={{ flex: 1, padding: "24px 24px 24px 32px", maxWidth: 680 }}>
-
-          {/* Compose post */}
           {view === "posts" && currentUser && (
-            <div
-              style={{
-                background: "#2c2e31",
-                borderRadius: 12,
-                padding: "16px 20px",
-                marginBottom: 20,
-                border: "1px solid #3a3d42",
-              }}
-            >
-              <textarea
-                value={postText}
-                onChange={(e) => setPostText(e.target.value.slice(0, 180))}
-                placeholder="I just got 150WPM in 60s!"
-                maxLength={180}
-                rows={3}
-                style={{
-                  width: "100%",
-                  background: "none",
-                  border: "none",
-                  color: "#d1d0c5",
-                  fontSize: 15,
-                  fontFamily: "inherit",
-                  resize: "none",
-                  outline: "none",
-                  lineHeight: 1.5,
-                  boxSizing: "border-box",
-                }}
-              />
-              <div style={{ fontSize: 12, color: "#646669", textAlign: "right", marginBottom: 10 }}>
-                {postText.length}/180
-              </div>
+            <div style={{ background: "#2c2e31", borderRadius: 12, padding: "16px 20px", marginBottom: 20, border: "1px solid #3a3d42" }}>
+              <textarea value={postText} onChange={(e) => setPostText(e.target.value.slice(0, 180))}
+                placeholder="I just got 150WPM in 60s!" maxLength={180} rows={3}
+                style={{ width: "100%", background: "none", border: "none", color: "#d1d0c5", fontSize: 15, fontFamily: "inherit", resize: "none", outline: "none", lineHeight: 1.5, boxSizing: "border-box" }} />
+              <div style={{ fontSize: 12, color: "#646669", textAlign: "right", marginBottom: 10 }}>{postText.length}/180</div>
 
-              {/* Post image preview */}
               {postImagePreview && (
                 <div style={{ position: "relative", marginBottom: 10 }}>
-                  <img
-                    src={postImagePreview}
-                    alt="post img"
-                    style={{ maxWidth: "100%", borderRadius: 8, maxHeight: 240, objectFit: "cover" }}
-                  />
-                  <button
-                    onClick={() => { setPostImageFile(null); setPostImagePreview(null); }}
-                    style={{
-                      position: "absolute", top: 6, right: 6,
-                      background: "#323437cc", border: "none", borderRadius: "50%",
-                      width: 24, height: 24, cursor: "pointer", color: "#fff", fontSize: 14,
-                    }}
-                  >×</button>
+                  <img src={postImagePreview} alt="post img" style={{ maxWidth: "100%", borderRadius: 8, maxHeight: 240, objectFit: "cover" }} />
+                  <button onClick={() => { setPostImageFile(null); setPostImagePreview(null); }}
+                    style={{ position: "absolute", top: 6, right: 6, background: "#323437cc", border: "none", borderRadius: "50%", width: 24, height: 24, cursor: "pointer", color: "#fff", fontSize: 14 }}>×</button>
                 </div>
               )}
 
+              {postError && <div style={{ color: "#ca4754", fontSize: 13, marginBottom: 8 }}>{postError}</div>}
+
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div style={{ display: "flex", gap: 8 }}>
-                  <input
-                    ref={postImageRef}
-                    type="file"
-                    accept=".jpeg,.jpg,.png,.avif,.webp"
-                    style={{ display: "none" }}
-                    onChange={handlePostImagePick}
-                  />
-                  <button
-                    onClick={() => postImageRef.current?.click()}
-                    style={{
-                      background: "none", border: "none", cursor: "pointer",
-                      padding: 6, borderRadius: 6, color: "#646669",
-                      transition: "color 0.15s",
-                    }}
-                    title="Attach image"
-                  >
+                  <input ref={postImageRef} type="file" accept=".jpeg,.jpg,.png,.avif,.webp" style={{ display: "none" }} onChange={handlePostImagePick} />
+                  <button onClick={() => postImageRef.current?.click()}
+                    style={{ background: "none", border: "none", cursor: "pointer", padding: 6, borderRadius: 6, color: "#646669", transition: "color 0.15s" }}
+                    title="Attach image">
                     <ImageIcon />
                   </button>
                 </div>
-
-                <button
-                  onClick={submitPost}
-                  disabled={posting || !postText.trim()}
+                <button onClick={submitPost} disabled={posting || !postText.trim()}
                   style={{
-                    background: posting || !postText.trim() ? "#3a3d42" : "#e2b714",
-                    border: "none",
-                    borderRadius: 8,
-                    padding: "8px 18px",
-                    color: posting || !postText.trim() ? "#646669" : "#323437",
-                    fontWeight: 700,
-                    fontSize: 14,
-                    fontFamily: "inherit",
+                    background: posting || !postText.trim() ? "#3a3d42" : "#e2b714", border: "none", borderRadius: 8,
+                    padding: "8px 18px", color: posting || !postText.trim() ? "#646669" : "#323437",
+                    fontWeight: 700, fontSize: 14, fontFamily: "inherit",
                     cursor: posting || !postText.trim() ? "not-allowed" : "pointer",
-                    transition: "background 0.15s",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                  }}
-                >
+                    transition: "background 0.15s", display: "flex", alignItems: "center", gap: 6,
+                  }}>
                   {posting ? <><LoadingSpinner /> Posting...</> : "Post!"}
                 </button>
               </div>
             </div>
           )}
 
-          {/* Posts feed */}
           <div>
             {view === "bookmarks" && (
-              <h3 style={{ color: "#646669", fontSize: 13, marginBottom: 16, textTransform: "uppercase", letterSpacing: 1 }}>
-                Bookmarks
-              </h3>
+              <h3 style={{ color: "#646669", fontSize: 13, marginBottom: 16, textTransform: "uppercase", letterSpacing: 1 }}>Bookmarks</h3>
             )}
             {visiblePosts.length === 0 && (
               <div style={{ color: "#646669", textAlign: "center", marginTop: 60, fontSize: 15 }}>
@@ -997,14 +1124,8 @@ export default function Home() {
               </div>
             )}
             {visiblePosts.map((post) => (
-              <PostCard
-                key={post.id}
-                post={post}
-                currentUser={currentUser}
-                onLike={handleLike}
-                onBookmark={handleBookmark}
-                onDelete={handleDelete}
-              />
+              <PostCard key={post.id} post={post} currentUser={currentUser}
+                onLike={handleLike} onBookmark={handleBookmark} onDelete={handleDelete} onEdit={handleEdit} />
             ))}
           </div>
         </div>
