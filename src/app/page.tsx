@@ -226,6 +226,14 @@ const OwnerBadge = () => (
   </svg>
 );
 
+const RefreshIcon = ({ spinning }: { spinning?: boolean }) => (
+  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width={16} height={16}
+    style={spinning ? { animation: "spin 0.7s linear infinite" } : undefined}>
+    <path d="M4.06189 13C4.02104 12.6724 4 12.3387 4 12C4 7.58172 7.58172 4 12 4C14.5006 4 16.7332 5.14727 18.2002 6.94416M19.9381 11C19.979 11.3276 20 11.6613 20 12C20 16.4183 16.4183 20 12 20C9.61061 20 7.46589 18.9525 6 17.2916M9 17H6V17.2916M18.2002 4V6.94416M18.2002 6.94416V6.99993L15.2002 7M6 20V17.2916"
+      stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface Reply {
@@ -1186,8 +1194,63 @@ export default function Home() {
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const postRefs = useRef<(HTMLDivElement | null)[]>([]);
 
+  const [refreshing, setRefreshing] = useState(false);
+
   const pfpInputRef = useRef<HTMLInputElement>(null);
   const postImageRef = useRef<HTMLInputElement>(null);
+
+  // ── Realtime subscriptions ──────────────────────────────────────────────────
+  const currentUserRef = useRef(currentUser);
+  useEffect(() => { currentUserRef.current = currentUser; }, [currentUser]);
+
+  useEffect(() => {
+    if (step !== "app") return;
+
+    // Posts channel — live updates for likes, comments, new/deleted posts
+    const postsChannel = supabase
+      .channel("posts-realtime")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "posts" }, (payload) => {
+        setPosts((prev) => {
+          if (prev.find((p) => p.id === payload.new.id)) return prev;
+          return [payload.new as Post, ...prev];
+        });
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "posts" }, (payload) => {
+        setPosts((prev) => prev.map((p) => p.id === payload.new.id ? (payload.new as Post) : p));
+      })
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "posts" }, (payload) => {
+        setPosts((prev) => prev.filter((p) => p.id !== payload.old.id));
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(postsChannel);
+    };
+  }, [step]);
+
+  useEffect(() => {
+    if (step !== "app" || !currentUser) return;
+
+    // Notifications channel — only for current user
+    const notifChannel = supabase
+      .channel(`notifications-${currentUser.id}`)
+      .on("postgres_changes", {
+        event: "INSERT",
+        schema: "public",
+        table: "notifications",
+        filter: `user_id=eq.${currentUser.id}`,
+      }, (payload) => {
+        const newNotif = payload.new as Notification;
+        setNotifications((prev) => [newNotif, ...prev]);
+        setUnreadNotifCount((prev) => prev + 1);
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(notifChannel);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, currentUser?.id]);
 
   useEffect(() => {
     async function restoreSession() {
@@ -1226,6 +1289,12 @@ export default function Home() {
   }
 
   async function loadPosts() { await loadPostsInner(); }
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    await loadPostsInner();
+    setRefreshing(false);
+  }
 
   // Infinite scroll: when 18th visible post enters view, load 20 more
   useEffect(() => {
@@ -1512,6 +1581,7 @@ export default function Home() {
 
   return (
     <main style={{ minHeight: "100vh", background: "#323437", fontFamily: "var(--font-roboto-mono), monospace", display: "flex", flexDirection: "column" }}>
+      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
       {showEditProfile && currentUser && (
         <EditProfileModal
           currentUser={currentUser}
@@ -1667,6 +1737,28 @@ export default function Home() {
                   {posting ? <><LoadingSpinner /> Posting...</> : "Post!"}
                 </button>
               </div>
+            </div>
+          )}
+
+          {/* Refresh button — always visible in posts view */}
+          {view === "posts" && (
+            <div style={{ marginBottom: 16 }}>
+              <button
+                onClick={handleRefresh}
+                disabled={refreshing}
+                style={{
+                  display: "flex", alignItems: "center", gap: 8,
+                  background: "#2c2e31", border: "1px solid #3a3d42", borderRadius: 8,
+                  padding: "8px 16px", color: refreshing ? "#646669" : "#d1d0c5",
+                  fontSize: 13, fontFamily: "inherit", cursor: refreshing ? "not-allowed" : "pointer",
+                  transition: "background 0.15s, border-color 0.15s",
+                }}
+                onMouseEnter={(e) => { if (!refreshing) { (e.currentTarget as HTMLButtonElement).style.borderColor = "#646669"; } }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = "#3a3d42"; }}
+              >
+                <RefreshIcon spinning={refreshing} />
+                {refreshing ? "Refreshing..." : "Refresh"}
+              </button>
             </div>
           )}
 
