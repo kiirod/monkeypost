@@ -573,7 +573,7 @@ function PostCard({
             {VERIFIED_USERS.has(post.username.toLowerCase()) && <OwnerBadge />}
           </div>
           {VERIFIED_USERS.has(post.username.toLowerCase()) && (
-            <div style={{ color: "#e2b714", opacity: 0.5, fontSize: 11, marginTop: -2, marginBottom: 4 }}>Owner</div>
+            <div style={{ color: "#e2b714", opacity: 0.5, fontSize: 11, marginTop: -2, marginBottom: 4 }}>Staff</div>
           )}
 
           {editing ? (
