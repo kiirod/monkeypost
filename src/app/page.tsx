@@ -1668,7 +1668,7 @@ export default function Home() {
                 action: () => {
                   setView("notifications");
                   markNotificationsRead();
-                  window.history.pushState(null, "", "/notif");
+                  window.history.pushState(null, "", "/notifications");
                 }
               },
               { label: "Developers", icon: <DevIcon />, action: () => window.location.href = "/dev" },
