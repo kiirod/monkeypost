@@ -770,7 +770,8 @@ export default function Home() {
   const [postImagePreview, setPostImagePreview] = useState<string | null>(null);
   const [posting, setPosting] = useState(false);
 
-  const [userHovered, setUserHovered] = useState(false);
+ const [userHovered, setUserHovered] = useState(false);
+const userHoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const pfpInputRef = useRef<HTMLInputElement>(null);
   const postImageRef = useRef<HTMLInputElement>(null);
@@ -1049,9 +1050,15 @@ export default function Home() {
 
           {/* User card with logout on hover */}
           {currentUser && (
-            <div style={{ position: "relative" }}
-              onMouseEnter={() => setUserHovered(true)}
-              onMouseLeave={() => setUserHovered(false)}>
+<div style={{ position: "relative" }}
+  onMouseEnter={() => {
+    if (userHoverTimeout.current) clearTimeout(userHoverTimeout.current);
+    setUserHovered(true);
+  }}
+  onMouseLeave={() => {
+    userHoverTimeout.current = setTimeout(() => setUserHovered(false), 2000);
+  }}
+>
               <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 8, background: userHovered ? "#2c2e31" : "none", transition: "background 0.15s", cursor: "default" }}>
                 <Avatar url={currentUser.pfp_url} username={currentUser.username} size={36} />
                 <span style={{ color: "#e2b714", fontSize: 14, fontWeight: 700 }}>@{currentUser.username}</span>
