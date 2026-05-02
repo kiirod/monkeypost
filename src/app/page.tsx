@@ -218,7 +218,9 @@ const NotificationIcon = () => (
   </svg>
 );
 
-const VERIFIED_USERS = new Set(["kiirod", "testaccount123", "moredevelopers"]);
+// new stuffers
+
+const VERIFIED_USERS = new Set(["kiirod", "testaccount123", "puppyboy", "asd", "ripvip"]);
 
 const OwnerBadge = () => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#e2b714" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width={16} height={16} style={{ display: "inline-block", verticalAlign: "middle", marginLeft: 4 }}>
@@ -593,7 +595,7 @@ function PostCard({
             {VERIFIED_USERS.has(post.username.toLowerCase()) && <OwnerBadge />}
           </div>
           {VERIFIED_USERS.has(post.username.toLowerCase()) && (
-            <div style={{ color: "#e2b714", opacity: 0.5, fontSize: 11, marginTop: -2, marginBottom: 4 }}>Owner</div>
+            <div style={{ color: "#e2b714", opacity: 0.5, fontSize: 11, marginTop: -2, marginBottom: 4 }}>Staff</div>
           )}
 
           {editing ? (
