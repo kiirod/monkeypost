@@ -1330,6 +1330,10 @@ export default function Home() {
 
   async function handleRefresh() {
     setRefreshing(true);
+    // Reset sort state so the next render does a full fresh sort
+    sortedPostsRef.current = [];
+    lastBatchRef.current = 0;
+    setVisibleCount(PAGE_SIZE);
     await loadPostsInner();
     setRefreshing(false);
   }
@@ -1540,18 +1544,43 @@ export default function Home() {
     const hoursOld = (Date.now() - new Date(post.created_at).getTime()) / (1000 * 60 * 60);
     const likes = post.likes ?? 0;
     const comments = (post.comments ?? []).length;
-    return (likes * 3 + comments * 2) / Math.pow(hoursOld + 2, 1.5);
+    // Replies worth more than likes since they're rarer and show deeper engagement
+    return (likes * 1 + comments * 5) / Math.pow(hoursOld + 2, 1.5);
   }
 
-  function getSortedPosts(postList: Post[]): Post[] {
-    // Separate low engagement posts (potential discovery candidates)
+  // Stable sorted order — only recalculated when we explicitly ask for a new batch
+  const sortedPostsRef = useRef<Post[]>([]);
+  const lastBatchRef = useRef<number>(0);
+
+  function getSortedPosts(postList: Post[], batchEnd: number): Post[] {
+    // Only re-sort when loading a new batch, not on every like/comment/post
+    if (batchEnd <= lastBatchRef.current && sortedPostsRef.current.length > 0) {
+      // Merge in any new posts or deleted posts without resorting existing order
+      const existingIds = new Set(sortedPostsRef.current.map((p) => p.id));
+      const currentIds = new Set(postList.map((p) => p.id));
+
+      // Remove deleted posts
+      let merged = sortedPostsRef.current.filter((p) => currentIds.has(p.id));
+
+      // Update existing posts in place (likes, comments etc) without moving them
+      merged = merged.map((p) => postList.find((np) => np.id === p.id) ?? p);
+
+      // Prepend brand new posts to the top
+      const newPosts = postList.filter((p) => !existingIds.has(p.id));
+      merged = [...newPosts, ...merged];
+
+      sortedPostsRef.current = merged;
+      return merged;
+    }
+
+    // Full re-sort for new batch
+    lastBatchRef.current = batchEnd;
+
     const lowEngagement = postList.filter((p) => (p.likes ?? 0) + (p.comments?.length ?? 0) <= 2);
     const normal = postList.filter((p) => (p.likes ?? 0) + (p.comments?.length ?? 0) > 2);
 
-    // Sort normal posts by score
     const sorted = [...normal].sort((a, b) => scorePost(b) - scorePost(a));
 
-    // 5% chance each slot gets replaced by a random low engagement post
     const result: Post[] = [];
     const usedDiscovery = new Set<string>();
 
@@ -1568,17 +1597,18 @@ export default function Home() {
       result.push(post);
     }
 
-    // Append any low engagement posts that weren't surfaced
+    // Always append remaining low engagement posts — never hide them
     for (const p of lowEngagement) {
       if (!usedDiscovery.has(p.id)) result.push(p);
     }
 
+    sortedPostsRef.current = result;
     return result;
   }
 
   const allVisiblePosts = view === "bookmarks" && currentUser
     ? posts.filter((p) => p.bookmarked_by?.includes(currentUser.id))
-    : getSortedPosts(posts);
+    : getSortedPosts(posts, visibleCount);
 
   const visiblePosts = allVisiblePosts.slice(0, visibleCount);
 
