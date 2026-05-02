@@ -218,6 +218,8 @@ const NotificationIcon = () => (
   </svg>
 );
 
+const VERIFIED_USERS = new Set(["kiirod", "testaccount123", "miodec"]);
+
 const OwnerBadge = () => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#e2b714" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width={16} height={16} style={{ display: "inline-block", verticalAlign: "middle", marginLeft: 4 }}>
     <path d="M12 3a3.6 3.6 0 00-3.05 1.68 3.6 3.6 0 00-.9-.1 3.6 3.6 0 00-2.42 1.06 3.6 3.6 0 00-.94 3.32A3.6 3.6 0 003 12a3.6 3.6 0 001.69 3.05 3.6 3.6 0 00.95 3.32 3.6 3.6 0 003.35.96A3.6 3.6 0 0012 21a3.6 3.6 0 003.04-1.67 3.6 3.6 0 004.3-4.3A3.6 3.6 0 0021 12a3.6 3.6 0 00-1.67-3.04v0a3.6 3.6 0 00-4.3-4.3A3.6 3.6 0 0012 3z" />
@@ -438,7 +440,7 @@ function ReplyItem({
         <div style={{ flex: 1 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <span style={{ color: "#e2b714", fontSize: fontSize - 1, fontWeight: 700 }}>@{reply.username}</span>
-            {reply.username.toLowerCase() === "kiirod" && <OwnerBadge />}
+            {VERIFIED_USERS.has(reply.username.toLowerCase()) && <OwnerBadge />}
             <span style={{ color: "#d1d0c5", fontSize }}>
               {renderWithTwemoji(reply.content)}
             </span>
@@ -566,9 +568,9 @@ function PostCard({
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ marginBottom: 4, display: "flex", alignItems: "center", gap: 4 }}>
             <span style={{ color: "#e2b714", fontWeight: 700, fontSize: 14 }}>@{post.username}</span>
-            {post.username.toLowerCase() === "kiirod" && <OwnerBadge />}
+            {VERIFIED_USERS.has(post.username.toLowerCase()) && <OwnerBadge />}
           </div>
-          {post.username.toLowerCase() === "kiirod" && (
+          {VERIFIED_USERS.has(post.username.toLowerCase()) && (
             <div style={{ color: "#e2b714", opacity: 0.5, fontSize: 11, marginTop: -2, marginBottom: 4 }}>Owner</div>
           )}
 
@@ -679,7 +681,7 @@ function PostCard({
                     <div style={{ flex: 1 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                         <span style={{ color: "#e2b714", fontSize: 12, fontWeight: 700 }}>@{c.username}</span>
-                        {c.username.toLowerCase() === "kiirod" && <OwnerBadge />}
+                        {VERIFIED_USERS.has(c.username.toLowerCase()) && <OwnerBadge />}
                         <span style={{ color: "#d1d0c5", fontSize: 13 }}>{renderWithTwemoji(c.content)}</span>
                       </div>
                       <div style={{ display: "flex", gap: 10, marginTop: 3 }}>
