@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
@@ -16,17 +16,13 @@ function getTwemojiUrl(emoji: string): string {
 }
 
 function renderWithTwemoji(text: string): React.ReactNode[] {
-  const emojiRegex =
-    /(\p{Emoji_Presentation}|\p{Emoji}\uFE0F|\p{Emoji_Modifier_Base}(?:\p{Emoji_Modifier})?|[\u{1F1E0}-\u{1F1FF}]{2}|\u{200D})/gu;
   const parts: React.ReactNode[] = [];
   let last = 0;
-  let match;
   let i = 0;
-  const regex = new RegExp(
-    /(\p{Emoji_Presentation}|\p{Extended_Pictographic})/gu
-  );
+  const regex = new RegExp(/(\p{Emoji_Presentation}|\p{Extended_Pictographic})/gu);
   const str = text;
   regex.lastIndex = 0;
+  let match;
   while ((match = regex.exec(str)) !== null) {
     if (match.index > last) {
       parts.push(str.slice(last, match.index));
@@ -79,14 +75,31 @@ function normalizeText(text: string): string {
     .replace(/[^a-z\s]/g, "");
 }
 
+// Words that are short/ambiguous and should only match as whole words
+const WHOLE_WORD_ONLY = new Set([
+  "ass", "sex", "cum", "bj", "mf", "nut", "wet", "lay", "raw", "bang", "bone",
+  "bust", "drip", "pipe", "rail", "shag", "simp", "smash", "thot", "hoe",
+  "clit", "tit", "ass", "balls", "anal",
+]);
+
 async function containsBlockedWord(text: string): Promise<boolean> {
   const blocked = await getBlockedWords();
   const normalized = normalizeText(text);
   const plain = text.toLowerCase().replace(/[^a-z0-9\s]/g, "");
+
   for (const word of blocked) {
     const normWord = normalizeText(word);
-    if (normalized.includes(normWord) || plain.includes(word.toLowerCase().replace(/[^a-z0-9\s]/g, ""))) {
-      return true;
+    const cleanWord = word.toLowerCase().replace(/[^a-z0-9\s]/g, "");
+
+    if (WHOLE_WORD_ONLY.has(cleanWord) || WHOLE_WORD_ONLY.has(normWord)) {
+      // Whole-word match only
+      const wordBoundaryRegex = new RegExp(`(?<![a-z])${normWord.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![a-z])`, "i");
+      if (wordBoundaryRegex.test(normalized)) return true;
+    } else {
+      // Substring match for longer/unambiguous words
+      if (normalized.includes(normWord) || plain.includes(cleanWord)) {
+        return true;
+      }
     }
   }
   return false;
@@ -199,6 +212,20 @@ const DownloadIcon = () => (
   </svg>
 );
 
+const NotificationIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width={20} height={20}>
+    <path d="M9.00195 17H5.60636C4.34793 17 3.71872 17 3.58633 16.9023C3.4376 16.7925 3.40126 16.7277 3.38515 16.5436C3.37082 16.3797 3.75646 15.7486 4.52776 14.4866C5.32411 13.1835 6.00031 11.2862 6.00031 8.6C6.00031 7.11479 6.63245 5.69041 7.75766 4.6402C8.88288 3.59 10.409 3 12.0003 3C13.5916 3 15.1177 3.59 16.2429 4.6402C17.3682 5.69041 18.0003 7.11479 18.0003 8.6C18.0003 11.2862 18.6765 13.1835 19.4729 14.4866C20.2441 15.7486 20.6298 16.3797 20.6155 16.5436C20.5994 16.7277 20.563 16.7925 20.4143 16.9023C20.2819 17 19.6527 17 18.3943 17H15.0003M9.00195 17L9.00031 18C9.00031 19.6569 10.3435 21 12.0003 21C13.6572 21 15.0003 19.6569 15.0003 18V17M9.00195 17H15.0003" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+const OwnerBadge = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#e2b714" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width={16} height={16} style={{ display: "inline-block", verticalAlign: "middle", marginLeft: 4 }}>
+    <path d="M12 3a3.6 3.6 0 00-3.05 1.68 3.6 3.6 0 00-.9-.1 3.6 3.6 0 00-2.42 1.06 3.6 3.6 0 00-.94 3.32A3.6 3.6 0 003 12a3.6 3.6 0 001.69 3.05 3.6 3.6 0 00.95 3.32 3.6 3.6 0 003.35.96A3.6 3.6 0 0012 21a3.6 3.6 0 003.04-1.67 3.6 3.6 0 004.3-4.3A3.6 3.6 0 0021 12a3.6 3.6 0 00-1.67-3.04v0a3.6 3.6 0 00-4.3-4.3A3.6 3.6 0 0012 3z" />
+    <path d="M15 10l-4 4" />
+    <path d="M9 12l2 2" />
+  </svg>
+);
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface Reply {
@@ -232,6 +259,17 @@ interface Post {
   comments: Comment[];
   created_at: string;
   edited?: boolean;
+}
+
+interface Notification {
+  id: string;
+  type: "like" | "comment" | "reply";
+  from_username: string;
+  post_id: string;
+  post_content: string;
+  message_content?: string;
+  created_at: string;
+  read: boolean;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -392,6 +430,7 @@ function ReplyItem({
         <div style={{ flex: 1 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <span style={{ color: "#e2b714", fontSize: fontSize - 1, fontWeight: 700 }}>@{reply.username}</span>
+            {reply.username.toLowerCase() === "kiirod" && <OwnerBadge />}
             <span style={{ color: "#d1d0c5", fontSize }}>
               {renderWithTwemoji(reply.content)}
             </span>
@@ -517,12 +556,13 @@ function PostCard({
       <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
         <Avatar url={post.pfp_url} username={post.username} size={40} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ marginBottom: 4 }}>
+          <div style={{ marginBottom: 4, display: "flex", alignItems: "center", gap: 4 }}>
             <span style={{ color: "#e2b714", fontWeight: 700, fontSize: 14 }}>@{post.username}</span>
-            {post.username.toLowerCase() === "kiirod" && (
-              <div style={{ color: "#e2b714", opacity: 0.5, fontSize: 11, marginTop: 1 }}>Owner</div>
-            )}
+            {post.username.toLowerCase() === "kiirod" && <OwnerBadge />}
           </div>
+          {post.username.toLowerCase() === "kiirod" && (
+            <div style={{ color: "#e2b714", opacity: 0.5, fontSize: 11, marginTop: -2, marginBottom: 4 }}>Owner</div>
+          )}
 
           {editing ? (
             <div>
@@ -631,6 +671,7 @@ function PostCard({
                     <div style={{ flex: 1 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                         <span style={{ color: "#e2b714", fontSize: 12, fontWeight: 700 }}>@{c.username}</span>
+                        {c.username.toLowerCase() === "kiirod" && <OwnerBadge />}
                         <span style={{ color: "#d1d0c5", fontSize: 13 }}>{renderWithTwemoji(c.content)}</span>
                       </div>
                       <div style={{ display: "flex", gap: 10, marginTop: 3 }}>
@@ -683,7 +724,7 @@ function PostCard({
   );
 }
 
-// ── Inline comment reply button (to avoid hooks-in-loops) ─────────────────────
+// ── Inline comment reply button ───────────────────────────────────────────────
 
 function CommentReplyButton({
   postId, commentId, commentIndex, currentUser, localComments, onUpdate,
@@ -749,6 +790,366 @@ function CommentReplyButton({
   );
 }
 
+// ── Edit Profile Modal ────────────────────────────────────────────────────────
+
+function EditProfileModal({
+  currentUser,
+  onClose,
+  onSave,
+}: {
+  currentUser: { id: string; username: string; pfp_url: string | null };
+  onClose: () => void;
+  onSave: (newUsername: string, newPfpUrl: string | null) => void;
+}) {
+  const [newUsername, setNewUsername] = useState(currentUser.username);
+  const [pfpFile, setPfpFile] = useState<File | null>(null);
+  const [pfpPreview, setPfpPreview] = useState<string | null>(currentUser.pfp_url);
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [usernameLastChanged, setUsernameLastChanged] = useState<string | null>(null);
+  const pfpRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    async function fetchProfile() {
+      const { data } = await supabase
+        .from("profiles")
+        .select("username_last_changed")
+        .eq("id", currentUser.id)
+        .single();
+      if (data?.username_last_changed) setUsernameLastChanged(data.username_last_changed);
+    }
+    fetchProfile();
+  }, [currentUser.id]);
+
+  const canChangeUsername = (() => {
+    if (!usernameLastChanged) return true;
+    const last = new Date(usernameLastChanged).getTime();
+    const now = Date.now();
+    return now - last >= 30 * 24 * 60 * 60 * 1000;
+  })();
+
+  const daysUntilUsernameChange = (() => {
+    if (!usernameLastChanged) return 0;
+    const last = new Date(usernameLastChanged).getTime();
+    const now = Date.now();
+    const diff = 30 * 24 * 60 * 60 * 1000 - (now - last);
+    return Math.ceil(diff / (24 * 60 * 60 * 1000));
+  })();
+
+  function handlePfpPick(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPfpFile(file);
+    setPfpPreview(URL.createObjectURL(file));
+  }
+
+  async function handleSave() {
+    setError("");
+    if (!/^[a-z0-9]{1,16}$/i.test(newUsername)) {
+      setError("Username must be 1–16 chars, letters and numbers only.");
+      return;
+    }
+    setSaving(true);
+
+    let pfp_url = currentUser.pfp_url;
+
+    // Upload new pfp if changed
+    if (pfpFile) {
+      const stripped = await stripImageMetadata(pfpFile);
+      const { data: uploadData } = await supabase.storage
+        .from("pfps")
+        .upload(`${currentUser.id}.jpg`, stripped, { upsert: true });
+      if (uploadData) {
+        const { data: urlData } = supabase.storage.from("pfps").getPublicUrl(uploadData.path);
+        pfp_url = urlData.publicUrl + `?t=${Date.now()}`;
+      }
+    }
+
+    const usernameChanged = newUsername !== currentUser.username;
+
+    if (usernameChanged && !canChangeUsername) {
+      setError(`You can change your username again in ${daysUntilUsernameChange} day(s).`);
+      setSaving(false);
+      return;
+    }
+
+    // Check username uniqueness if changed
+    if (usernameChanged) {
+      const { data: existing } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("username", newUsername)
+        .neq("id", currentUser.id)
+        .single();
+      if (existing) {
+        setError("That username is already taken.");
+        setSaving(false);
+        return;
+      }
+    }
+
+    // Update profile
+    const updateData: Record<string, string | null> = { pfp_url };
+    if (usernameChanged) {
+      updateData.username = newUsername;
+      updateData.username_last_changed = new Date().toISOString();
+    }
+    await supabase.from("profiles").update(updateData).eq("id", currentUser.id);
+
+    // Update all posts by this user
+    if (usernameChanged || pfpFile) {
+      const { data: userPosts } = await supabase
+        .from("posts")
+        .select("id, comments")
+        .eq("user_id", currentUser.id);
+
+      if (userPosts) {
+        for (const post of userPosts) {
+          const updatedPost: Record<string, unknown> = {};
+          if (pfpFile) updatedPost.pfp_url = pfp_url;
+          if (usernameChanged) updatedPost.username = newUsername;
+
+          // Update comments/replies that belong to this user
+          const updatedComments = updateUsernameInComments(
+            post.comments ?? [],
+            currentUser.username,
+            usernameChanged ? newUsername : currentUser.username,
+            pfpFile ? pfp_url : currentUser.pfp_url
+          );
+          updatedPost.comments = updatedComments;
+
+          await supabase.from("posts").update(updatedPost).eq("id", post.id);
+        }
+      }
+
+      // Also update comments on other people's posts
+      if (usernameChanged || pfpFile) {
+        const { data: allPosts } = await supabase
+          .from("posts")
+          .select("id, comments")
+          .neq("user_id", currentUser.id);
+
+        if (allPosts) {
+          for (const post of allPosts) {
+            const updatedComments = updateUsernameInComments(
+              post.comments ?? [],
+              currentUser.username,
+              usernameChanged ? newUsername : currentUser.username,
+              pfpFile ? pfp_url : currentUser.pfp_url
+            );
+            const hasChanges = JSON.stringify(updatedComments) !== JSON.stringify(post.comments);
+            if (hasChanges) {
+              await supabase.from("posts").update({ comments: updatedComments }).eq("id", post.id);
+            }
+          }
+        }
+      }
+    }
+
+    setSaving(false);
+    onSave(usernameChanged ? newUsername : currentUser.username, pfp_url);
+  }
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, background: "#000000aa", zIndex: 100,
+      display: "flex", alignItems: "center", justifyContent: "center",
+    }} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={{
+        background: "#2c2e31", borderRadius: 14, padding: "28px 28px",
+        width: "100%", maxWidth: 400, border: "1px solid #3a3d42",
+        display: "flex", flexDirection: "column", gap: 18,
+      }}>
+        <h2 style={{ color: "#e2b714", fontSize: 18, fontWeight: 700, margin: 0 }}>Edit Profile</h2>
+
+        {/* PFP section */}
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          <Avatar url={pfpPreview} username={newUsername} size={56} />
+          <div>
+            <input ref={pfpRef} type="file" accept=".jpeg,.jpg,.png,.gif,.avif,.webp" style={{ display: "none" }} onChange={handlePfpPick} />
+            <button onClick={() => pfpRef.current?.click()}
+              style={{
+                background: "#3a3d42", border: "none", borderRadius: 8,
+                padding: "8px 14px", color: "#d1d0c5", fontSize: 13,
+                fontFamily: "inherit", cursor: "pointer",
+              }}>
+              Change profile picture
+            </button>
+            {pfpFile && <div style={{ color: "#e2b714", fontSize: 11, marginTop: 4 }}>New picture selected</div>}
+          </div>
+        </div>
+
+        {/* Username section */}
+        <div>
+          <label style={{ color: "#646669", fontSize: 12, display: "block", marginBottom: 6 }}>Username</label>
+          <input
+            value={newUsername}
+            onChange={(e) => {
+              if (canChangeUsername) {
+                setNewUsername(e.target.value.replace(/[^a-zA-Z0-9]/g, "").slice(0, 16));
+              }
+            }}
+            disabled={!canChangeUsername}
+            maxLength={16}
+            style={{
+              width: "100%", background: canChangeUsername ? "#3a3d42" : "#2c2e31",
+              border: "1px solid #3a3d42", borderRadius: 8,
+              padding: "10px 14px", color: canChangeUsername ? "#fff" : "#646669",
+              fontSize: 14, fontFamily: "inherit", outline: "none", boxSizing: "border-box",
+              cursor: canChangeUsername ? "text" : "not-allowed",
+            }} />
+          {!canChangeUsername && (
+            <div style={{ color: "#646669", fontSize: 11, marginTop: 4 }}>
+              You can change your username again in {daysUntilUsernameChange} day(s).
+            </div>
+          )}
+        </div>
+
+        {error && <div style={{ color: "#ca4754", fontSize: 13 }}>{error}</div>}
+
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={handleSave} disabled={saving}
+            style={{
+              flex: 1, background: saving ? "#3a3d42" : "#e2b714", border: "none", borderRadius: 8,
+              padding: "10px 0", color: saving ? "#646669" : "#323437",
+              fontWeight: 700, fontSize: 14, fontFamily: "inherit", cursor: saving ? "not-allowed" : "pointer",
+            }}>
+            {saving ? "Saving..." : "Save"}
+          </button>
+          <button onClick={onClose}
+            style={{
+              flex: 1, background: "#3a3d42", border: "none", borderRadius: 8,
+              padding: "10px 0", color: "#d1d0c5", fontSize: 14, fontFamily: "inherit", cursor: "pointer",
+            }}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Helper to recursively update username/pfp in comments and replies
+function updateUsernameInComments(
+  comments: Comment[],
+  oldUsername: string,
+  newUsername: string,
+  newPfpUrl: string | null
+): Comment[] {
+  return comments.map((c) => {
+    const updatedReplies = updateUsernameInReplies(c.replies ?? [], oldUsername, newUsername, newPfpUrl);
+    if (c.username === oldUsername) {
+      return { ...c, username: newUsername, pfp_url: newPfpUrl, replies: updatedReplies };
+    }
+    return { ...c, replies: updatedReplies };
+  });
+}
+
+function updateUsernameInReplies(
+  replies: Reply[],
+  oldUsername: string,
+  newUsername: string,
+  newPfpUrl: string | null
+): Reply[] {
+  return replies.map((r) => {
+    const updatedReplies = updateUsernameInReplies(r.replies ?? [], oldUsername, newUsername, newPfpUrl);
+    if (r.username === oldUsername) {
+      return { ...r, username: newUsername, pfp_url: newPfpUrl, replies: updatedReplies };
+    }
+    return { ...r, replies: updatedReplies };
+  });
+}
+
+// ── Delete Account Modal ──────────────────────────────────────────────────────
+
+function DeleteAccountModal({
+  currentUser,
+  onClose,
+  onDeleted,
+}: {
+  currentUser: { id: string; username: string; pfp_url: string | null };
+  onClose: () => void;
+  onDeleted: () => void;
+}) {
+  const [deleting, setDeleting] = useState(false);
+
+  async function handleDelete() {
+    setDeleting(true);
+
+    // Delete all posts by this user
+    await supabase.from("posts").delete().eq("user_id", currentUser.id);
+
+    // Remove this user's comments and replies from all other posts
+    const { data: allPosts } = await supabase.from("posts").select("id, comments");
+    if (allPosts) {
+      for (const post of allPosts) {
+        const filtered = removeUserFromComments(post.comments ?? [], currentUser.username);
+        const changed = JSON.stringify(filtered) !== JSON.stringify(post.comments);
+        if (changed) {
+          await supabase.from("posts").update({ comments: filtered }).eq("id", post.id);
+        }
+      }
+    }
+
+    // Delete profile
+    await supabase.from("profiles").delete().eq("id", currentUser.id);
+
+    // Sign out
+    await supabase.auth.signOut();
+
+    setDeleting(false);
+    onDeleted();
+  }
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, background: "#000000bb", zIndex: 200,
+      display: "flex", alignItems: "center", justifyContent: "center",
+    }}>
+      <div style={{
+        background: "#2c2e31", borderRadius: 14, padding: "28px",
+        width: "100%", maxWidth: 380, border: "1px solid #3a3d42",
+        display: "flex", flexDirection: "column", gap: 16,
+      }}>
+        <h2 style={{ color: "#ca4754", fontSize: 18, fontWeight: 700, margin: 0 }}>Delete Account</h2>
+        <p style={{ color: "#d1d0c5", fontSize: 14, lineHeight: 1.6, margin: 0 }}>
+          Do you wish to delete your account? This will delete all your posts, replies, and username.
+        </p>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={handleDelete} disabled={deleting}
+            style={{
+              flex: 1, background: deleting ? "#3a3d42" : "#ca4754", border: "none", borderRadius: 8,
+              padding: "10px 0", color: "#fff", fontWeight: 700, fontSize: 14,
+              fontFamily: "inherit", cursor: deleting ? "not-allowed" : "pointer",
+            }}>
+            {deleting ? "Deleting..." : "Yes!"}
+          </button>
+          <button onClick={onClose} disabled={deleting}
+            style={{
+              flex: 1, background: "#3a3d42", border: "none", borderRadius: 8,
+              padding: "10px 0", color: "#d1d0c5", fontSize: 14,
+              fontFamily: "inherit", cursor: "pointer",
+            }}>
+            No
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function removeUserFromComments(comments: Comment[], username: string): Comment[] {
+  return comments
+    .filter((c) => c.username !== username)
+    .map((c) => ({ ...c, replies: removeUserFromReplies(c.replies ?? [], username) }));
+}
+
+function removeUserFromReplies(replies: Reply[], username: string): Reply[] {
+  return replies
+    .filter((r) => r.username !== username)
+    .map((r) => ({ ...r, replies: removeUserFromReplies(r.replies ?? [], username) }));
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export default function Home() {
@@ -762,7 +1163,7 @@ export default function Home() {
 
   const [currentUser, setCurrentUser] = useState<{ id: string; username: string; pfp_url: string | null } | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
-  const [view, setView] = useState<"posts" | "bookmarks">("posts");
+  const [view, setView] = useState<"posts" | "bookmarks" | "notifications">("posts");
 
   const [postText, setPostText] = useState("");
   const [postError, setPostError] = useState("");
@@ -770,8 +1171,20 @@ export default function Home() {
   const [postImagePreview, setPostImagePreview] = useState<string | null>(null);
   const [posting, setPosting] = useState(false);
 
- const [userHovered, setUserHovered] = useState(false);
-const userHoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [userHovered, setUserHovered] = useState(false);
+  const userHoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const [showEditProfile, setShowEditProfile] = useState(false);
+  const [showDeleteAccount, setShowDeleteAccount] = useState(false);
+
+  // Notifications
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [unreadNotifCount, setUnreadNotifCount] = useState(0);
+
+  // Pagination
+  const PAGE_SIZE = 20;
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const postRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   const pfpInputRef = useRef<HTMLInputElement>(null);
   const postImageRef = useRef<HTMLInputElement>(null);
@@ -784,6 +1197,7 @@ const userHoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
         if (profile) {
           setCurrentUser({ id: session.user.id, username: profile.username, pfp_url: profile.pfp_url });
           await loadPostsInner();
+          await loadNotifications(session.user.id);
           setStep("app");
           return;
         }
@@ -794,12 +1208,43 @@ const userHoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  async function loadNotifications(userId: string) {
+    const { data } = await supabase
+      .from("notifications")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false });
+    if (data) {
+      setNotifications(data as Notification[]);
+      setUnreadNotifCount(data.filter((n: Notification) => !n.read).length);
+    }
+  }
+
   async function loadPostsInner() {
     const { data } = await supabase.from("posts").select("*").order("created_at", { ascending: false });
     if (data) setPosts(data as Post[]);
   }
 
   async function loadPosts() { await loadPostsInner(); }
+
+  // Infinite scroll: when 18th visible post enters view, load 20 more
+  useEffect(() => {
+    if (view !== "posts" && view !== "bookmarks") return;
+    const targetIndex = visibleCount - 3;
+    const target = postRefs.current[targetIndex];
+    if (!target) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setVisibleCount((prev) => prev + PAGE_SIZE);
+        }
+      },
+      { threshold: 0.1 }
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [visibleCount, view, posts.length]);
 
   function handlePfpPick(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -855,6 +1300,7 @@ const userHoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
     if (!profile) { setStep("signup"); setSignupError("Account not found."); return; }
     setCurrentUser({ id: authData.user.id, username: profile.username, pfp_url: profile.pfp_url });
     await loadPosts();
+    await loadNotifications(authData.user.id);
     setStep("app");
   }
 
@@ -862,6 +1308,8 @@ const userHoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
     await supabase.auth.signOut();
     setCurrentUser(null);
     setPosts([]);
+    setNotifications([]);
+    setUnreadNotifCount(0);
     setStep("signup");
   }
 
@@ -915,10 +1363,25 @@ const userHoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
     const post = posts.find((p) => p.id === postId);
     if (!post) return;
     const liked = post.liked_by?.includes(currentUser.id);
-    const newLikedBy = liked ? post.liked_by.filter((id) => id !== currentUser.id) : [...(post.liked_by ?? []), currentUser.id];
+    const newLikedBy = liked
+      ? post.liked_by.filter((id) => id !== currentUser.id)
+      : [...(post.liked_by ?? []), currentUser.id];
     const newLikes = liked ? post.likes - 1 : post.likes + 1;
     setPosts((prev) => prev.map((p) => p.id === postId ? { ...p, likes: newLikes, liked_by: newLikedBy } : p));
     await supabase.from("posts").update({ likes: newLikes, liked_by: newLikedBy }).eq("id", postId);
+
+    // Add notification if liking (not unliking), and not liking own post
+    if (!liked && post.user_id !== currentUser.id) {
+      await supabase.from("notifications").insert({
+        user_id: post.user_id,
+        type: "like",
+        from_username: currentUser.username,
+        post_id: postId,
+        post_content: post.content,
+        read: false,
+        created_at: new Date().toISOString(),
+      });
+    }
   }
 
   async function handleBookmark(postId: string) {
@@ -926,7 +1389,9 @@ const userHoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
     const post = posts.find((p) => p.id === postId);
     if (!post) return;
     const bookmarked = post.bookmarked_by?.includes(currentUser.id);
-    const newBookmarkedBy = bookmarked ? post.bookmarked_by.filter((id) => id !== currentUser.id) : [...(post.bookmarked_by ?? []), currentUser.id];
+    const newBookmarkedBy = bookmarked
+      ? post.bookmarked_by.filter((id) => id !== currentUser.id)
+      : [...(post.bookmarked_by ?? []), currentUser.id];
     setPosts((prev) => prev.map((p) => p.id === postId ? { ...p, bookmarked_by: newBookmarkedBy } : p));
     await supabase.from("posts").update({ bookmarked_by: newBookmarkedBy }).eq("id", postId);
   }
@@ -944,9 +1409,31 @@ const userHoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
     await supabase.from("posts").update({ content: newContent, edited: true }).eq("id", postId);
   }
 
-  const visiblePosts = view === "bookmarks" && currentUser
+  function handleEditProfileSave(newUsername: string, newPfpUrl: string | null) {
+    setCurrentUser((prev) => prev ? { ...prev, username: newUsername, pfp_url: newPfpUrl } : prev);
+    // Also update all posts in local state
+    setPosts((prev) => prev.map((p) => {
+      if (p.user_id === currentUser?.id) {
+        return { ...p, username: newUsername, pfp_url: newPfpUrl };
+      }
+      return p;
+    }));
+    setShowEditProfile(false);
+    loadPostsInner();
+  }
+
+  async function markNotificationsRead() {
+    if (!currentUser) return;
+    setUnreadNotifCount(0);
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    await supabase.from("notifications").update({ read: true }).eq("user_id", currentUser.id);
+  }
+
+  const allVisiblePosts = view === "bookmarks" && currentUser
     ? posts.filter((p) => p.bookmarked_by?.includes(currentUser.id))
     : posts;
+
+  const visiblePosts = allVisiblePosts.slice(0, visibleCount);
 
   // ── Signup screen ──────────────────────────────────────────────────────────
 
@@ -1025,6 +1512,27 @@ const userHoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   return (
     <main style={{ minHeight: "100vh", background: "#323437", fontFamily: "var(--font-roboto-mono), monospace", display: "flex", flexDirection: "column" }}>
+      {showEditProfile && currentUser && (
+        <EditProfileModal
+          currentUser={currentUser}
+          onClose={() => setShowEditProfile(false)}
+          onSave={handleEditProfileSave}
+        />
+      )}
+      {showDeleteAccount && currentUser && (
+        <DeleteAccountModal
+          currentUser={currentUser}
+          onClose={() => setShowDeleteAccount(false)}
+          onDeleted={() => {
+            setCurrentUser(null);
+            setPosts([]);
+            setNotifications([]);
+            setUnreadNotifCount(0);
+            setStep("signup");
+          }}
+        />
+      )}
+
       <div style={{ width: "100%", padding: "16px 32px", borderBottom: "1px solid #3a3d42", display: "flex", alignItems: "center", position: "sticky", top: 0, background: "#323437", zIndex: 10 }}>
         <span style={{ fontSize: 22, fontWeight: 700, color: "#e2b714", letterSpacing: "-0.5px" }}>monkeypost</span>
       </div>
@@ -1035,6 +1543,25 @@ const userHoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
           <nav style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 24 }}>
             {[
               { label: "Posts", icon: <PostsIcon />, action: () => setView("posts") },
+              {
+                label: "Notifications",
+                icon: (
+                  <div style={{ position: "relative", display: "inline-flex" }}>
+                    <NotificationIcon />
+                    {unreadNotifCount > 0 && (
+                      <span style={{
+                        position: "absolute", top: -3, left: -3,
+                        background: "#e2b714", borderRadius: "50%",
+                        width: 10, height: 10, border: "2px solid #323437",
+                      }} />
+                    )}
+                  </div>
+                ),
+                action: () => {
+                  setView("notifications");
+                  markNotificationsRead();
+                }
+              },
               { label: "Developers", icon: <DevIcon />, action: () => window.location.href = "/dev" },
               { label: "Support Developing", icon: <SupportIcon />, action: () => window.location.href = "/discord" },
               { label: "Bookmarks", icon: <BookmarkIcon filled />, action: () => setView("bookmarks") },
@@ -1048,32 +1575,54 @@ const userHoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
             ))}
           </nav>
 
-          {/* User card with logout on hover */}
+          {/* User card with logout/edit on hover */}
           {currentUser && (
-<div style={{ position: "relative" }}
-  onMouseEnter={() => {
-    if (userHoverTimeout.current) clearTimeout(userHoverTimeout.current);
-    setUserHovered(true);
-  }}
-  onMouseLeave={() => {
-    userHoverTimeout.current = setTimeout(() => setUserHovered(false), 2000);
-  }}
->
+            <div style={{ position: "relative" }}
+              onMouseEnter={() => {
+                if (userHoverTimeout.current) clearTimeout(userHoverTimeout.current);
+                setUserHovered(true);
+              }}
+              onMouseLeave={() => {
+                userHoverTimeout.current = setTimeout(() => setUserHovered(false), 2000);
+              }}
+            >
               <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 8, background: userHovered ? "#2c2e31" : "none", transition: "background 0.15s", cursor: "default" }}>
                 <Avatar url={currentUser.pfp_url} username={currentUser.username} size={36} />
                 <span style={{ color: "#e2b714", fontSize: 14, fontWeight: 700 }}>@{currentUser.username}</span>
               </div>
               {userHovered && (
-                <button onClick={handleLogout}
-                  style={{
-                    position: "absolute", bottom: "calc(100% + 4px)", left: 12,
-                    background: "#ca4754", border: "none", borderRadius: 6,
-                    padding: "6px 14px", color: "#fff", fontWeight: 700,
-                    fontSize: 13, fontFamily: "inherit", cursor: "pointer",
-                    whiteSpace: "nowrap", transition: "opacity 0.15s",
-                  }}>
-                  Logout
-                </button>
+                <div style={{
+                  position: "absolute", bottom: "calc(100% + 4px)", left: 12,
+                  display: "flex", gap: 6, flexWrap: "wrap",
+                }}>
+                  <button onClick={() => { setShowEditProfile(true); setUserHovered(false); }}
+                    style={{
+                      background: "#3a3d42", border: "none", borderRadius: 6,
+                      padding: "6px 14px", color: "#d1d0c5", fontWeight: 700,
+                      fontSize: 13, fontFamily: "inherit", cursor: "pointer",
+                      whiteSpace: "nowrap",
+                    }}>
+                    Edit Profile
+                  </button>
+                  <button onClick={handleLogout}
+                    style={{
+                      background: "#ca4754", border: "none", borderRadius: 6,
+                      padding: "6px 14px", color: "#fff", fontWeight: 700,
+                      fontSize: 13, fontFamily: "inherit", cursor: "pointer",
+                      whiteSpace: "nowrap",
+                    }}>
+                    Logout
+                  </button>
+                  <button onClick={() => { setShowDeleteAccount(true); setUserHovered(false); }}
+                    style={{
+                      background: "#2c2e31", border: "1px solid #ca4754", borderRadius: 6,
+                      padding: "6px 14px", color: "#ca4754", fontWeight: 700,
+                      fontSize: 13, fontFamily: "inherit", cursor: "pointer",
+                      whiteSpace: "nowrap",
+                    }}>
+                    Delete Account
+                  </button>
+                </div>
               )}
             </div>
           )}
@@ -1121,20 +1670,70 @@ const userHoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
             </div>
           )}
 
-          <div>
-            {view === "bookmarks" && (
-              <h3 style={{ color: "#646669", fontSize: 13, marginBottom: 16, textTransform: "uppercase", letterSpacing: 1 }}>Bookmarks</h3>
-            )}
-            {visiblePosts.length === 0 && (
-              <div style={{ color: "#646669", textAlign: "center", marginTop: 60, fontSize: 15 }}>
-                {view === "bookmarks" ? "No bookmarks yet." : "No posts yet. Be the first!"}
-              </div>
-            )}
-            {visiblePosts.map((post) => (
-              <PostCard key={post.id} post={post} currentUser={currentUser}
-                onLike={handleLike} onBookmark={handleBookmark} onDelete={handleDelete} onEdit={handleEdit} />
-            ))}
-          </div>
+          {/* Notifications view */}
+          {view === "notifications" && (
+            <div>
+              <h3 style={{ color: "#646669", fontSize: 13, marginBottom: 16, textTransform: "uppercase", letterSpacing: 1 }}>Notifications</h3>
+              {notifications.length === 0 && (
+                <div style={{ color: "#646669", textAlign: "center", marginTop: 60, fontSize: 15 }}>
+                  No notifications yet.
+                </div>
+              )}
+              {notifications.map((notif) => (
+                <div key={notif.id} style={{
+                  background: notif.read ? "#2c2e31" : "#2c2e31",
+                  borderRadius: 12, padding: "14px 18px", marginBottom: 10,
+                  border: `1px solid ${notif.read ? "#3a3d42" : "#e2b714"}`,
+                  opacity: notif.read ? 0.7 : 1,
+                }}>
+                  <div style={{ color: "#e2b714", fontSize: 13, fontWeight: 700, marginBottom: 4 }}>
+                    @{notif.from_username}{" "}
+                    <span style={{ color: "#d1d0c5", fontWeight: 400 }}>
+                      {notif.type === "like" ? "liked your post!" : notif.type === "comment" ? "replied to your post!" : "replied to your post!"}
+                    </span>
+                  </div>
+                  {notif.post_content && (
+                    <div style={{ color: "#646669", fontSize: 12, marginTop: 2 }}>
+                      "{notif.post_content.slice(0, 80)}{notif.post_content.length > 80 ? "…" : ""}"
+                    </div>
+                  )}
+                  {notif.message_content && (
+                    <div style={{ color: "#d1d0c5", fontSize: 12, marginTop: 4, background: "#3a3d42", borderRadius: 6, padding: "6px 10px" }}>
+                      {notif.message_content}
+                    </div>
+                  )}
+                  <div style={{ color: "#646669", fontSize: 11, marginTop: 6 }}>
+                    {new Date(notif.created_at).toLocaleDateString()}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Posts / Bookmarks view */}
+          {(view === "posts" || view === "bookmarks") && (
+            <div>
+              {view === "bookmarks" && (
+                <h3 style={{ color: "#646669", fontSize: 13, marginBottom: 16, textTransform: "uppercase", letterSpacing: 1 }}>Bookmarks</h3>
+              )}
+              {visiblePosts.length === 0 && (
+                <div style={{ color: "#646669", textAlign: "center", marginTop: 60, fontSize: 15 }}>
+                  {view === "bookmarks" ? "No bookmarks yet." : "No posts yet. Be the first!"}
+                </div>
+              )}
+              {visiblePosts.map((post, index) => (
+                <div key={post.id} ref={(el) => { postRefs.current[index] = el; }}>
+                  <PostCard post={post} currentUser={currentUser}
+                    onLike={handleLike} onBookmark={handleBookmark} onDelete={handleDelete} onEdit={handleEdit} />
+                </div>
+              ))}
+              {visibleCount < allVisiblePosts.length && (
+                <div style={{ color: "#646669", textAlign: "center", padding: "20px 0", fontSize: 13 }}>
+                  Loading more posts...
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </main>
