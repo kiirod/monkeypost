@@ -218,9 +218,7 @@ const NotificationIcon = () => (
   </svg>
 );
 
-// new stuffers
-
-const VERIFIED_USERS = new Set(["kiirod", "testaccount123", "puppyboy", "asd", "ripvip"]);
+const VERIFIED_USERS = new Set(["kiirod", "testaccount123", "asd", "ripvip", "puppyboy"]);
 
 const OwnerBadge = () => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#e2b714" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width={16} height={16} style={{ display: "inline-block", verticalAlign: "middle", marginLeft: 4 }}>
@@ -1132,9 +1130,13 @@ function DeleteAccountModal({
     await supabase.from("profiles").delete().eq("id", currentUser.id);
 
     // Delete the auth account via the API route (which uses service role key)
+    const { data: { session } } = await supabase.auth.getSession();
     await fetch("/api/delete-account", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${session?.access_token}`,
+      },
       body: JSON.stringify({ userId: currentUser.id }),
     });
 
@@ -1648,7 +1650,7 @@ export default function Home() {
         <aside style={{ width: 220, flexShrink: 0, padding: "32px 0", display: "flex", flexDirection: "column", justifyContent: "flex-end", position: "sticky", top: 64, height: "calc(100vh - 64px)", paddingBottom: 32 }}>
           <nav style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 24 }}>
             {[
-              { label: "Posts", icon: <PostsIcon />, action: () => setView("posts") },
+              { label: "Posts", icon: <PostsIcon />, action: () => { setView("posts"); window.history.pushState(null, "", "/"); } },
               {
                 label: "Notifications",
                 icon: (
@@ -1666,11 +1668,12 @@ export default function Home() {
                 action: () => {
                   setView("notifications");
                   markNotificationsRead();
+                  window.history.pushState(null, "", "/notif");
                 }
               },
               { label: "Developers", icon: <DevIcon />, action: () => window.location.href = "/dev" },
               { label: "Support Developing", icon: <SupportIcon />, action: () => window.location.href = "/discord" },
-              { label: "Bookmarks", icon: <BookmarkIcon filled />, action: () => setView("bookmarks") },
+              { label: "Bookmarks", icon: <BookmarkIcon filled />, action: () => { setView("bookmarks"); window.history.pushState(null, "", "/bookmarks"); } },
             ].map(({ label, icon, action }) => (
               <button key={label} onClick={action}
                 style={{ display: "flex", alignItems: "center", gap: 12, background: "none", border: "none", cursor: "pointer", color: "#d1d0c5", fontSize: 14, fontFamily: "inherit", padding: "10px 12px", borderRadius: 8, textAlign: "left", transition: "background 0.15s", width: "100%" }}
