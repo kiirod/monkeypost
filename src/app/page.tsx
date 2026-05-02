@@ -218,7 +218,7 @@ const NotificationIcon = () => (
   </svg>
 );
 
-const VERIFIED_USERS = new Set(["kiirod", "testaccount123", "asd", "ripvip", "puppyboy"]);
+const VERIFIED_USERS = new Set(["kiirod", "puppyboy", "asd", "ripvip", "testaccount123"]);
 
 const OwnerBadge = () => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#e2b714" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width={16} height={16} style={{ display: "inline-block", verticalAlign: "middle", marginLeft: 4 }}>
@@ -1536,9 +1536,49 @@ export default function Home() {
     await supabase.from("notifications").update({ read: true }).eq("user_id", currentUser.id);
   }
 
+  function scorePost(post: Post): number {
+    const hoursOld = (Date.now() - new Date(post.created_at).getTime()) / (1000 * 60 * 60);
+    const likes = post.likes ?? 0;
+    const comments = (post.comments ?? []).length;
+    return (likes * 3 + comments * 2) / Math.pow(hoursOld + 2, 1.5);
+  }
+
+  function getSortedPosts(postList: Post[]): Post[] {
+    // Separate low engagement posts (potential discovery candidates)
+    const lowEngagement = postList.filter((p) => (p.likes ?? 0) + (p.comments?.length ?? 0) <= 2);
+    const normal = postList.filter((p) => (p.likes ?? 0) + (p.comments?.length ?? 0) > 2);
+
+    // Sort normal posts by score
+    const sorted = [...normal].sort((a, b) => scorePost(b) - scorePost(a));
+
+    // 5% chance each slot gets replaced by a random low engagement post
+    const result: Post[] = [];
+    const usedDiscovery = new Set<string>();
+
+    for (const post of sorted) {
+      if (lowEngagement.length > 0 && Math.random() < 0.05) {
+        const available = lowEngagement.filter((p) => !usedDiscovery.has(p.id));
+        if (available.length > 0) {
+          const pick = available[Math.floor(Math.random() * available.length)];
+          usedDiscovery.add(pick.id);
+          result.push(pick);
+          continue;
+        }
+      }
+      result.push(post);
+    }
+
+    // Append any low engagement posts that weren't surfaced
+    for (const p of lowEngagement) {
+      if (!usedDiscovery.has(p.id)) result.push(p);
+    }
+
+    return result;
+  }
+
   const allVisiblePosts = view === "bookmarks" && currentUser
     ? posts.filter((p) => p.bookmarked_by?.includes(currentUser.id))
-    : posts;
+    : getSortedPosts(posts);
 
   const visiblePosts = allVisiblePosts.slice(0, visibleCount);
 
@@ -1668,7 +1708,7 @@ export default function Home() {
                 action: () => {
                   setView("notifications");
                   markNotificationsRead();
-                  window.history.pushState(null, "", "/notifications");
+                  window.history.pushState(null, "", "/notif");
                 }
               },
               { label: "Developers", icon: <DevIcon />, action: () => window.location.href = "/dev" },
