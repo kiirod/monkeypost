@@ -218,9 +218,7 @@ const NotificationIcon = () => (
   </svg>
 );
 
-// here are the users with the verified checkmark
-
-const VERIFIED_USERS = new Set(["kiirod", "testaccount123", "puppyboy", "asd", "RIPVIP"]);
+const VERIFIED_USERS = new Set(["kiirod", "testaccount123", "moredevelopers"]);
 
 const OwnerBadge = () => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#e2b714" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width={16} height={16} style={{ display: "inline-block", verticalAlign: "middle", marginLeft: 4 }}>
@@ -440,12 +438,12 @@ function ReplyItem({
       <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
         <Avatar url={reply.pfp_url} username={reply.username} size={avatarSize} />
         <div style={{ flex: 1 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 2 }}>
             <span style={{ color: "#e2b714", fontSize: fontSize - 1, fontWeight: 700 }}>@{reply.username}</span>
             {VERIFIED_USERS.has(reply.username.toLowerCase()) && <OwnerBadge />}
-            <span style={{ color: "#d1d0c5", fontSize }}>
-              {renderWithTwemoji(reply.content)}
-            </span>
+          </div>
+          <div style={{ color: "#d1d0c5", fontSize, lineHeight: 1.4, wordBreak: "break-word" }}>
+            {renderWithTwemoji(reply.content)}
           </div>
           <div style={{ display: "flex", gap: 10, marginTop: 3 }}>
             {currentUser && depth < 4 && (
@@ -517,7 +515,15 @@ function PostCard({
   const [editText, setEditText] = useState(post.content);
   const [editError, setEditError] = useState("");
 
-  useEffect(() => { setLocalComments(post.comments ?? []); }, [post.comments]);
+  // Sync comments from realtime post prop — but don't clobber local state while user is actively typing
+  const prevCommentsRef = useRef<string>("");
+  useEffect(() => {
+    const incoming = JSON.stringify(post.comments ?? []);
+    if (incoming !== prevCommentsRef.current) {
+      prevCommentsRef.current = incoming;
+      setLocalComments(post.comments ?? []);
+    }
+  }, [post.comments]);
 
   const liked = currentUser ? post.liked_by?.includes(currentUser.id) : false;
   const bookmarked = currentUser ? post.bookmarked_by?.includes(currentUser.id) : false;
@@ -541,6 +547,20 @@ function PostCard({
     setLocalComments(updatedComments);
     setCommentText("");
     await supabase.from("posts").update({ comments: updatedComments }).eq("id", post.id);
+
+    // Notify post owner if it's not themselves
+    if (post.user_id !== currentUser.id) {
+      await supabase.from("notifications").insert({
+        user_id: post.user_id,
+        type: "comment",
+        from_username: currentUser.username,
+        post_id: post.id,
+        post_content: post.content,
+        message_content: commentText.trim(),
+        read: false,
+        created_at: new Date().toISOString(),
+      });
+    }
   }
 
   async function deleteComment(commentId: string, commentUsername: string) {
@@ -573,7 +593,7 @@ function PostCard({
             {VERIFIED_USERS.has(post.username.toLowerCase()) && <OwnerBadge />}
           </div>
           {VERIFIED_USERS.has(post.username.toLowerCase()) && (
-            <div style={{ color: "#e2b714", opacity: 0.5, fontSize: 11, marginTop: -2, marginBottom: 4 }}>Staff</div>
+            <div style={{ color: "#e2b714", opacity: 0.5, fontSize: 11, marginTop: -2, marginBottom: 4 }}>Owner</div>
           )}
 
           {editing ? (
@@ -681,11 +701,11 @@ function PostCard({
                   <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
                     <Avatar url={c.pfp_url} username={c.username} size={26} />
                     <div style={{ flex: 1 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 2 }}>
                         <span style={{ color: "#e2b714", fontSize: 12, fontWeight: 700 }}>@{c.username}</span>
                         {VERIFIED_USERS.has(c.username.toLowerCase()) && <OwnerBadge />}
-                        <span style={{ color: "#d1d0c5", fontSize: 13 }}>{renderWithTwemoji(c.content)}</span>
                       </div>
+                      <div style={{ color: "#d1d0c5", fontSize: 13, lineHeight: 1.4, wordBreak: "break-word", marginBottom: 3 }}>{renderWithTwemoji(c.content)}</div>
                       <div style={{ display: "flex", gap: 10, marginTop: 3 }}>
                         {currentUser && (
                           <CommentReplyButton postId={post.id} commentId={c.id} commentIndex={ci}
@@ -1103,10 +1123,20 @@ function DeleteAccountModal({
       }
     }
 
-    // Delete profile
+    // Delete notifications for this user
+    await supabase.from("notifications").delete().eq("user_id", currentUser.id);
+
+    // Delete profile row — this frees the username
     await supabase.from("profiles").delete().eq("id", currentUser.id);
 
-    // Sign out
+    // Delete the auth account via the API route (which uses service role key)
+    await fetch("/api/delete-account", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId: currentUser.id }),
+    });
+
+    // Sign out locally
     await supabase.auth.signOut();
 
     setDeleting(false);
