@@ -122,6 +122,34 @@ interface Post {
   views?: number;
 }
 
+function ReplyThread({ comment, depth }: { comment: Comment; depth: number }) {
+  const avatarSize = depth === 0 ? 28 : depth === 1 ? 24 : 20;
+  const fontSize = depth === 0 ? 13 : 12;
+  return (
+    <div style={{ marginLeft: depth > 0 ? 20 : 0, marginBottom: depth === 0 ? 14 : 8 }}>
+      <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+        <Avatar url={comment.pfp_url} username={comment.username} size={avatarSize} />
+        <div style={{ flex: 1 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 2 }}>
+            <span style={{ color: "#e2b714", fontSize: fontSize - 1, fontWeight: 700 }}>@{comment.username}</span>
+            {VERIFIED_USERS.has(comment.username.toLowerCase()) && <OwnerBadge />}
+          </div>
+          <div style={{ color: "#d1d0c5", fontSize, lineHeight: 1.4, wordBreak: "break-word" }}>
+            {renderWithTwemoji(comment.content)}
+          </div>
+          {(comment.replies ?? []).length > 0 && (
+            <div style={{ marginTop: 8, paddingLeft: 4, borderLeft: "2px solid #3a3d42" }}>
+              {(comment.replies ?? []).map((r) => (
+                <ReplyThread key={r.id} comment={r as Comment} depth={depth + 1} />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function PostPage() {
   const params = useParams();
   const postId = params.id as string;
@@ -266,16 +294,7 @@ export default function PostPage() {
             Replies ({post!.comments.length})
           </h3>
           {post!.comments.map((c) => (
-            <div key={c.id} style={{ display: "flex", gap: 10, marginBottom: 14 }}>
-              <Avatar url={c.pfp_url} username={c.username} size={28} />
-              <div>
-                <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 2 }}>
-                  <span style={{ color: "#e2b714", fontSize: 12, fontWeight: 700 }}>@{c.username}</span>
-                  {VERIFIED_USERS.has(c.username.toLowerCase()) && <OwnerBadge />}
-                </div>
-                <div style={{ color: "#d1d0c5", fontSize: 13, lineHeight: 1.4 }}>{renderWithTwemoji(c.content)}</div>
-              </div>
-            </div>
+            <ReplyThread key={c.id} comment={c} depth={0} />
           ))}
           {currentUser && (
             <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
