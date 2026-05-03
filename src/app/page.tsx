@@ -15,31 +15,65 @@ function getTwemojiUrl(emoji: string): string {
   return `https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/${cp}.svg`;
 }
 
-function renderWithTwemoji(text: string): React.ReactNode[] {
-  const parts: React.ReactNode[] = [];
+// Renders text with emoji images, blue clickable links, and blue @mentions
+function renderWithTwemoji(text: string, onMentionClick?: (username: string) => void): React.ReactNode[] {
+  // Split by URLs, @mentions, then handle emojis within plain segments
+  const tokenRegex = /(https?:\/\/[^\s]+|(?<!\w)(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+(?:com|net|org|io|dev|app|co|gg|tv|me|uk|us|ca|au)[^\s]*|(?<![a-zA-Z0-9])@[a-zA-Z0-9]{1,16})/g;
+  const emojiRegex = /(\p{Emoji_Presentation}|\p{Extended_Pictographic})/gu;
+
+  const nodes: React.ReactNode[] = [];
   let last = 0;
-  let i = 0;
-  const regex = new RegExp(/(\p{Emoji_Presentation}|\p{Extended_Pictographic})/gu);
-  const str = text;
-  regex.lastIndex = 0;
+  let keyIdx = 0;
   let match;
-  while ((match = regex.exec(str)) !== null) {
-    if (match.index > last) {
-      parts.push(str.slice(last, match.index));
+
+  function renderEmojis(segment: string): React.ReactNode[] {
+    const parts: React.ReactNode[] = [];
+    let eLast = 0;
+    emojiRegex.lastIndex = 0;
+    let em;
+    while ((em = emojiRegex.exec(segment)) !== null) {
+      if (em.index > eLast) parts.push(segment.slice(eLast, em.index));
+      parts.push(
+        <img key={keyIdx++} src={getTwemojiUrl(em[0])} alt={em[0]}
+          style={{ width: "1.15em", height: "1.15em", display: "inline-block", verticalAlign: "-0.2em", margin: "0 0.05em" }} />
+      );
+      eLast = em.index + em[0].length;
     }
-    const em = match[0];
-    parts.push(
-      <img
-        key={i++}
-        src={getTwemojiUrl(em)}
-        alt={em}
-        style={{ width: "1.15em", height: "1.15em", display: "inline-block", verticalAlign: "-0.2em", margin: "0 0.05em" }}
-      />
-    );
-    last = match.index + em.length;
+    if (eLast < segment.length) parts.push(segment.slice(eLast));
+    return parts;
   }
-  if (last < str.length) parts.push(str.slice(last));
-  return parts;
+
+  tokenRegex.lastIndex = 0;
+  while ((match = tokenRegex.exec(text)) !== null) {
+    if (match.index > last) {
+      nodes.push(...renderEmojis(text.slice(last, match.index)));
+    }
+    const token = match[0];
+    if (token.startsWith("@")) {
+      const username = token.slice(1);
+      nodes.push(
+        <span key={keyIdx++}
+          onClick={() => onMentionClick?.(username)}
+          style={{ color: "#4a9eff", cursor: onMentionClick ? "pointer" : "default", fontWeight: 600 }}>
+          {token}
+        </span>
+      );
+    } else {
+      // It's a URL
+      let href = token;
+      if (!href.startsWith("http")) href = "https://" + href;
+      nodes.push(
+        <a key={keyIdx++} href={href} target="_blank" rel="noopener noreferrer"
+          style={{ color: "#4a9eff", textDecoration: "underline", wordBreak: "break-all" }}
+          onClick={(e) => e.stopPropagation()}>
+          {token}
+        </a>
+      );
+    }
+    last = match.index + token.length;
+  }
+  if (last < text.length) nodes.push(...renderEmojis(text.slice(last)));
+  return nodes;
 }
 
 // ── Blocked words filter ──────────────────────────────────────────────────────
@@ -273,7 +307,7 @@ interface Post {
 
 interface Notification {
   id: string;
-  type: "like" | "comment" | "reply";
+  type: "like" | "comment" | "reply" | "mention";
   from_username: string;
   post_id: string;
   post_content: string;
@@ -560,6 +594,32 @@ function PostCard({
         read: false,
         created_at: new Date().toISOString(),
       });
+    }
+
+    // Notify mentioned users
+    const mentionRegex = /@([a-zA-Z0-9]{1,16})/g;
+    const mentioned = new Set<string>();
+    let mm;
+    while ((mm = mentionRegex.exec(commentText)) !== null) {
+      const u = mm[1].toLowerCase();
+      if (u !== currentUser.username.toLowerCase()) mentioned.add(u);
+    }
+    if (mentioned.size > 0) {
+      const { data: profiles } = await supabase.from("profiles").select("id, username").in("username", [...mentioned]);
+      if (profiles) {
+        for (const profile of profiles) {
+          await supabase.from("notifications").insert({
+            user_id: profile.id,
+            type: "mention",
+            from_username: currentUser.username,
+            post_id: post.id,
+            post_content: post.content,
+            message_content: commentText.trim(),
+            read: false,
+            created_at: new Date().toISOString(),
+          });
+        }
+      }
     }
   }
 
@@ -1676,11 +1736,46 @@ export default function Home() {
       edited: false,
     });
 
+    // Fire mention notifications
+    await sendMentionNotifications(postText.trim(), currentUser.username, null, postText.trim());
+
     setPostText("");
     setPostImageFile(null);
     setPostImagePreview(null);
     await loadPosts();
     setPosting(false);
+  }
+
+  // Extract @mentions from text and notify each mentioned user
+  async function sendMentionNotifications(text: string, fromUsername: string, postId: string | null, postContent: string) {
+    const mentionRegex = /@([a-zA-Z0-9]{1,16})/g;
+    const mentioned = new Set<string>();
+    let m;
+    while ((m = mentionRegex.exec(text)) !== null) {
+      const u = m[1].toLowerCase();
+      if (u !== fromUsername.toLowerCase()) mentioned.add(u);
+    }
+    if (mentioned.size === 0) return;
+
+    // Look up user IDs for mentioned usernames
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("id, username")
+      .in("username", [...mentioned]);
+
+    if (!profiles) return;
+    for (const profile of profiles) {
+      await supabase.from("notifications").insert({
+        user_id: profile.id,
+        type: "mention",
+        from_username: fromUsername,
+        post_id: postId,
+        post_content: postContent,
+        message_content: text,
+        read: false,
+        created_at: new Date().toISOString(),
+      });
+    }
   }
 
   async function handleLike(postId: string) {
@@ -2134,7 +2229,7 @@ export default function Home() {
                   <div style={{ color: "#e2b714", fontSize: 13, fontWeight: 700, marginBottom: 4 }}>
                     @{notif.from_username}{" "}
                     <span style={{ color: "#d1d0c5", fontWeight: 400 }}>
-                      {notif.type === "like" ? "liked your post!" : notif.type === "comment" ? "replied to your post!" : "replied to your post!"}
+                      {notif.type === "like" ? "liked your post!" : notif.type === "mention" ? "mentioned you!" : "replied to your post!"}
                     </span>
                   </div>
                   {notif.post_content && (
