@@ -405,6 +405,7 @@ function ReplyItem({
   onUpdate,
   isAdmin,
   isShadowbannedUser,
+  onAdminShadowban,
 }: {
   reply: Reply;
   depth: number;
@@ -415,6 +416,7 @@ function ReplyItem({
   onUpdate: (updatedComments: Comment[]) => void;
   isAdmin: boolean;
   isShadowbannedUser: (username: string) => boolean;
+  onAdminShadowban: (username: string) => void;
 }) {
   const [showReplyInput, setShowReplyInput] = useState(false);
   const [replyText, setReplyText] = useState("");
@@ -520,6 +522,12 @@ function ReplyItem({
                   style={{ background: "none", border: "none", cursor: "pointer", color: "#ca4754", padding: 0, display: "flex", opacity: 0.7 }}>
                   <TrashIcon />
                 </button>
+                {!replyIsShadowbanned && (
+                  <button onClick={() => onAdminShadowban(reply.username)} title="Shadowban user"
+                    style={{ background: "none", border: "none", cursor: "pointer", color: "#ca4754", padding: 0, display: "flex", opacity: 0.7 }}>
+                    <BanIcon />
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -562,7 +570,7 @@ function ReplyItem({
           {(reply.replies ?? []).map((r, i) => (
             <ReplyItem key={r.id} reply={r} depth={depth + 1} currentUser={currentUser}
               postId={postId} commentId={commentId} replyPath={[...replyPath, i]} onUpdate={onUpdate}
-              isAdmin={isAdmin} isShadowbannedUser={isShadowbannedUser} />
+              isAdmin={isAdmin} isShadowbannedUser={isShadowbannedUser} onAdminShadowban={onAdminShadowban} />
           ))}
         </div>
       </div>
@@ -867,7 +875,7 @@ function PostCard({
                       {(c.replies ?? []).map((r, ri) => (
                         <ReplyItem key={r.id} reply={r} depth={1} currentUser={currentUser}
                           postId={post.id} commentId={c.id} replyPath={[ri]} onUpdate={handleCommentsUpdate}
-                          isAdmin={isAdmin} isShadowbannedUser={(u) => isShadowbanned} />
+                          isAdmin={isAdmin} isShadowbannedUser={(u) => isShadowbanned} onAdminShadowban={onAdminShadowban} />
                       ))}
                     </div>
                   </div>
