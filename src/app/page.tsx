@@ -259,6 +259,15 @@ const NotificationIcon = () => (
   </svg>
 );
 
+const ADMIN_USER = "kiirod";
+
+const BanIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width={16} height={16}>
+    <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2"/>
+    <path d="M5.63 5.63l12.74 12.74" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+  </svg>
+);
+
 const VERIFIED_USERS = new Set(["kiirod", "puppyboy", "asd", "ripvip", "testaccount123"]);
 
 const OwnerBadge = () => (
@@ -538,6 +547,10 @@ function PostCard({
   onBookmark,
   onDelete,
   onEdit,
+  isAdmin,
+  isShadowbanned,
+  onAdminDelete,
+  onAdminShadowban,
 }: {
   post: Post;
   currentUser: { id: string; username: string; pfp_url: string | null } | null;
@@ -545,6 +558,10 @@ function PostCard({
   onBookmark: (id: string) => void;
   onDelete: (id: string) => void;
   onEdit: (id: string, newContent: string) => void;
+  isAdmin: boolean;
+  isShadowbanned: boolean;
+  onAdminDelete: (id: string) => void;
+  onAdminShadowban: (username: string) => void;
 }) {
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState("");
@@ -658,6 +675,23 @@ function PostCard({
           <div style={{ marginBottom: 4, display: "flex", alignItems: "center", gap: 4 }}>
             <span style={{ color: "#e2b714", fontWeight: 700, fontSize: 14 }}>@{post.username}</span>
             {VERIFIED_USERS.has(post.username.toLowerCase()) && <OwnerBadge />}
+            {isShadowbanned && isAdmin && (
+              <span style={{ color: "#ca4754", fontSize: 10, background: "#ca475422", borderRadius: 4, padding: "1px 6px", marginLeft: 4 }}>shadowbanned</span>
+            )}
+            {isAdmin && post.username.toLowerCase() !== ADMIN_USER && (
+              <div style={{ display: "flex", gap: 4, marginLeft: 6 }}>
+                <button onClick={() => onAdminDelete(post.id)} title="Admin delete post"
+                  style={{ background: "none", border: "none", cursor: "pointer", color: "#ca4754", padding: 0, display: "flex", opacity: 0.7 }}>
+                  <TrashIcon />
+                </button>
+                {!isShadowbanned && (
+                  <button onClick={() => onAdminShadowban(post.username)} title="Shadowban user"
+                    style={{ background: "none", border: "none", cursor: "pointer", color: "#ca4754", padding: 0, display: "flex", opacity: 0.7 }}>
+                    <BanIcon />
+                  </button>
+                )}
+              </div>
+            )}
           </div>
           {VERIFIED_USERS.has(post.username.toLowerCase()) && (
             <div style={{ color: "#e2b714", opacity: 0.5, fontSize: 11, marginTop: -2, marginBottom: 4 }}>Staff</div>
@@ -710,7 +744,7 @@ function PostCard({
                 cursor: "pointer", color: liked ? "#e2b714" : "#646669", fontSize: 13, padding: 0, transition: "color 0.15s",
               }}>
               <HeartIcon filled={liked} />
-              <span>{post.likes ?? 0}</span>
+              <span>{isShadowbanned && currentUser?.id === post.user_id ? post.likes : isShadowbanned ? (post.liked_by?.filter(id => id !== currentUser?.id).length ?? 0) : (post.likes ?? 0)}</span>
             </button>
 
             <button onClick={() => onBookmark(post.id)}
@@ -1483,8 +1517,13 @@ export default function Home() {
     try { return JSON.parse(localStorage.getItem("mp_linked_accounts") ?? "[]"); } catch { return []; }
   });
 
-  // Notifications
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  // Shadowbanned users — loaded once, only used for display filtering
+  const [shadowbannedUsers, setShadowbannedUsers] = useState<Set<string>>(new Set());
+
+  async function loadShadowbannedUsers() {
+    const { data } = await supabase.from("profiles").select("username").eq("shadowbanned", true);
+    if (data) setShadowbannedUsers(new Set(data.map((p: { username: string }) => p.username.toLowerCase())));
+  }
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
 
   // Pagination
@@ -1559,6 +1598,7 @@ export default function Home() {
           setCurrentUser({ id: session.user.id, username: profile.username, pfp_url: profile.pfp_url });
           await loadPostsInner();
           await loadNotifications(session.user.id);
+          await loadShadowbannedUsers();
           setStep("app");
           return;
         }
@@ -1672,6 +1712,7 @@ export default function Home() {
     setCurrentUser({ id: authData.user.id, username: profile.username, pfp_url: profile.pfp_url });
     await loadPosts();
     await loadNotifications(authData.user.id);
+    await loadShadowbannedUsers();
     setStep("app");
   }
 
@@ -1718,6 +1759,30 @@ export default function Home() {
     if (blocked) { setPostError("Your message has a word that is disallowed."); return; }
     setPostError("");
     setPosting(true);
+
+    // Shadowbanned users see their own post locally but it doesn't go to the database
+    if (shadowbannedUsers.has(currentUser.username.toLowerCase())) {
+      const fakePost: Post = {
+        id: crypto.randomUUID(),
+        user_id: currentUser.id,
+        username: currentUser.username,
+        pfp_url: currentUser.pfp_url,
+        content: postText.trim(),
+        image_url: null,
+        likes: 0,
+        liked_by: [],
+        bookmarked_by: [],
+        comments: [],
+        created_at: new Date().toISOString(),
+        edited: false,
+      };
+      setPosts((prev) => [fakePost, ...prev]);
+      setPostText("");
+      setPostImageFile(null);
+      setPostImagePreview(null);
+      setPosting(false);
+      return;
+    }
 
     let image_url: string | null = null;
     if (postImageFile) {
@@ -1790,6 +1855,17 @@ export default function Home() {
     const post = posts.find((p) => p.id === postId);
     if (!post) return;
     const liked = post.liked_by?.includes(currentUser.id);
+
+    // If the current user is shadowbanned, only update locally for them
+    if (shadowbannedUsers.has(currentUser.username.toLowerCase())) {
+      const newLikedBy = liked
+        ? post.liked_by.filter((id) => id !== currentUser.id)
+        : [...(post.liked_by ?? []), currentUser.id];
+      const newLikes = liked ? post.likes - 1 : post.likes + 1;
+      setPosts((prev) => prev.map((p) => p.id === postId ? { ...p, likes: newLikes, liked_by: newLikedBy } : p));
+      return; // Don't write to database
+    }
+
     const newLikedBy = liked
       ? post.liked_by.filter((id) => id !== currentUser.id)
       : [...(post.liked_by ?? []), currentUser.id];
@@ -1797,7 +1873,6 @@ export default function Home() {
     setPosts((prev) => prev.map((p) => p.id === postId ? { ...p, likes: newLikes, liked_by: newLikedBy } : p));
     await supabase.from("posts").update({ likes: newLikes, liked_by: newLikedBy }).eq("id", postId);
 
-    // Add notification if liking (not unliking), and not liking own post
     if (!liked && post.user_id !== currentUser.id) {
       await supabase.from("notifications").insert({
         user_id: post.user_id,
@@ -1834,6 +1909,16 @@ export default function Home() {
   async function handleEdit(postId: string, newContent: string) {
     setPosts((prev) => prev.map((p) => p.id === postId ? { ...p, content: newContent, edited: true } : p));
     await supabase.from("posts").update({ content: newContent, edited: true }).eq("id", postId);
+  }
+
+  async function handleAdminDelete(postId: string) {
+    setPosts((prev) => prev.filter((p) => p.id !== postId));
+    await supabase.from("posts").delete().eq("id", postId);
+  }
+
+  async function handleAdminShadowban(username: string) {
+    await supabase.from("profiles").update({ shadowbanned: true }).eq("username", username);
+    setShadowbannedUsers((prev) => new Set([...prev, username.toLowerCase()]));
   }
 
   function handleEditProfileSave(newUsername: string, newPfpUrl: string | null) {
@@ -1924,7 +2009,17 @@ export default function Home() {
 
   const allVisiblePosts = view === "bookmarks" && currentUser
     ? posts.filter((p) => p.bookmarked_by?.includes(currentUser.id))
-    : getSortedPosts(posts, visibleCount);
+    : getSortedPosts(
+        // Hide shadowbanned posts from everyone except the banned user themselves and the admin
+        posts.filter((p) => {
+          const isBanned = shadowbannedUsers.has(p.username.toLowerCase());
+          if (!isBanned) return true;
+          if (currentUser?.username.toLowerCase() === ADMIN_USER) return true;
+          if (currentUser?.username.toLowerCase() === p.username.toLowerCase()) return true;
+          return false;
+        }),
+        visibleCount
+      );
 
   const visiblePosts = allVisiblePosts.slice(0, visibleCount);
 
@@ -2271,7 +2366,12 @@ export default function Home() {
               {visiblePosts.map((post, index) => (
                 <div key={post.id} ref={(el) => { postRefs.current[index] = el; }}>
                   <PostCard post={post} currentUser={currentUser}
-                    onLike={handleLike} onBookmark={handleBookmark} onDelete={handleDelete} onEdit={handleEdit} />
+                    onLike={handleLike} onBookmark={handleBookmark} onDelete={handleDelete} onEdit={handleEdit}
+                    isAdmin={currentUser?.username.toLowerCase() === ADMIN_USER}
+                    isShadowbanned={shadowbannedUsers.has(post.username.toLowerCase())}
+                    onAdminDelete={handleAdminDelete}
+                    onAdminShadowban={handleAdminShadowban}
+                  />
                 </div>
               ))}
               {visibleCount < allVisiblePosts.length && (
