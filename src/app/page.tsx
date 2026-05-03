@@ -280,6 +280,22 @@ const NotificationIcon = () => (
   </svg>
 );
 
+const RepostIcon = ({ active }: { active?: boolean }) => (
+  <svg fill="none" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" width={18} height={18}>
+    <path d="M6,14V9A6,6,0,0,1,16.89,5.54" style={{ stroke: active ? "#22c55e" : "#ffffff", strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2 }}/>
+    <path d="M18,10v5A6,6,0,0,1,7.11,18.46" style={{ stroke: active ? "#22c55e" : "#ffffff", strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2 }}/>
+    <polyline points="8 12 6 14 4 12" style={{ fill: "none", stroke: active ? "#22c55e" : "#ffffff", strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2 }}/>
+    <polyline points="16 12 18 10 20 12" style={{ fill: "none", stroke: active ? "#22c55e" : "#ffffff", strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2 }}/>
+  </svg>
+);
+
+const ViewsIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width={16} height={16}>
+    <path d="M15.0007 12C15.0007 13.6569 13.6576 15 12.0007 15C10.3439 15 9.00073 13.6569 9.00073 12C9.00073 10.3431 10.3439 9 12.0007 9C13.6576 9 15.0007 10.3431 15.0007 12Z" stroke="#646669" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M12.0012 5C7.52354 5 3.73326 7.94288 2.45898 12C3.73324 16.0571 7.52354 19 12.0012 19C16.4788 19 20.2691 16.0571 21.5434 12C20.2691 7.94291 16.4788 5 12.0012 5Z" stroke="#646669" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+);
+
 const ADMIN_USER = "kiirod";
 
 const BanIcon = () => (
@@ -331,15 +347,26 @@ interface Post {
   id: string;
   user_id: string;
   username: string;
+  handle?: string;
   pfp_url: string | null;
   content: string;
   image_url: string | null;
   likes: number;
   liked_by: string[];
   bookmarked_by: string[];
+  reposted_by: string[];
   comments: Comment[];
   created_at: string;
   edited?: boolean;
+  views?: number;
+}
+
+interface Profile {
+  id: string;
+  username: string;
+  handle: string;
+  display_name: string;
+  pfp_url: string | null;
 }
 
 interface Notification {
@@ -612,6 +639,8 @@ function PostCard({
   isShadowbanned,
   onAdminDelete,
   onAdminShadowban,
+  onRepost,
+  blockedUsers,
 }: {
   post: Post;
   currentUser: { id: string; username: string; pfp_url: string | null } | null;
@@ -623,6 +652,8 @@ function PostCard({
   isShadowbanned: boolean;
   onAdminDelete: (id: string) => void;
   onAdminShadowban: (username: string) => void;
+  onRepost: (id: string) => void;
+  blockedUsers: Set<string>;
 }) {
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState("");
@@ -643,6 +674,11 @@ function PostCard({
       setLocalComments(post.comments ?? []);
     }
   }, [post.comments]);
+
+  const reposted = currentUser ? (post.reposted_by ?? []).includes(currentUser.id) : false;
+  const isBlocked = blockedUsers.has(post.user_id);
+
+  if (isBlocked) return null;
 
   const liked = currentUser ? post.liked_by?.includes(currentUser.id) : false;
   const bookmarked = currentUser ? post.bookmarked_by?.includes(currentUser.id) : false;
@@ -731,22 +767,27 @@ function PostCard({
   return (
     <div style={{ background: "#2c2e31", borderRadius: 12, padding: "16px 20px", marginBottom: 12, border: "1px solid #3a3d42" }}>
       <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-        <Avatar url={post.pfp_url} username={post.username} size={40} />
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <a href={`/users/${post.handle ?? post.username.toLowerCase()}`} onClick={(e) => e.stopPropagation()} style={{ textDecoration: "none", flexShrink: 0 }}>
+          <Avatar url={post.pfp_url} username={post.username} size={40} />
+        </a>
+        <div style={{ flex: 1, minWidth: 0, cursor: "pointer" }} onClick={(e) => { if ((e.target as HTMLElement).closest("a,button,input,textarea")) return; window.location.href = `/posts/${post.id}`; }}>
           <div style={{ marginBottom: 4, display: "flex", alignItems: "center", gap: 4 }}>
             <span style={{ color: "#e2b714", fontWeight: 700, fontSize: 14 }}>@{post.username}</span>
             {VERIFIED_USERS.has(post.username.toLowerCase()) && <OwnerBadge />}
+            {post.handle && post.handle !== post.username.toLowerCase() && (
+              <span style={{ color: "#646669", fontSize: 12 }}>@{post.handle}</span>
+            )}
             {isShadowbanned && isAdmin && (
               <span style={{ color: "#ca4754", fontSize: 10, background: "#ca475422", borderRadius: 4, padding: "1px 6px", marginLeft: 4 }}>shadowbanned</span>
             )}
             {isAdmin && post.username.toLowerCase() !== ADMIN_USER && (
               <div style={{ display: "flex", gap: 4, marginLeft: 6 }}>
-                <button onClick={() => onAdminDelete(post.id)} title="Admin delete post"
+                <button onClick={(e) => { e.stopPropagation(); onAdminDelete(post.id); }} title="Admin delete post"
                   style={{ background: "none", border: "none", cursor: "pointer", color: "#ca4754", padding: 0, display: "flex", opacity: 0.7 }}>
                   <TrashIcon />
                 </button>
                 {!isShadowbanned && (
-                  <button onClick={() => onAdminShadowban(post.username)} title="Shadowban user"
+                  <button onClick={(e) => { e.stopPropagation(); onAdminShadowban(post.username); }} title="Shadowban user"
                     style={{ background: "none", border: "none", cursor: "pointer", color: "#ca4754", padding: 0, display: "flex", opacity: 0.7 }}>
                     <BanIcon />
                   </button>
@@ -799,7 +840,7 @@ function PostCard({
 
           {/* Actions */}
           <div style={{ display: "flex", gap: 20, marginTop: 12, alignItems: "center" }}>
-            <button onClick={() => onLike(post.id)}
+            <button onClick={(e) => { e.stopPropagation(); onLike(post.id); }}
               style={{
                 display: "flex", alignItems: "center", gap: 6, background: "none", border: "none",
                 cursor: "pointer", color: liked ? "#e2b714" : "#646669", fontSize: 13, padding: 0, transition: "color 0.15s",
@@ -808,7 +849,16 @@ function PostCard({
               <span>{isShadowbanned && currentUser?.id === post.user_id ? post.likes : isShadowbanned ? (post.liked_by?.filter(id => id !== currentUser?.id).length ?? 0) : (post.likes ?? 0)}</span>
             </button>
 
-            <button onClick={() => onBookmark(post.id)}
+            <button onClick={(e) => { e.stopPropagation(); onRepost(post.id); }}
+              style={{
+                display: "flex", alignItems: "center", gap: 6, background: "none", border: "none",
+                cursor: "pointer", color: reposted ? "#22c55e" : "#646669", fontSize: 13, padding: 0, transition: "color 0.15s",
+              }}>
+              <RepostIcon active={reposted} />
+              <span>{(post.reposted_by ?? []).length}</span>
+            </button>
+
+            <button onClick={(e) => { e.stopPropagation(); onBookmark(post.id); }}
               style={{
                 display: "flex", alignItems: "center", gap: 6, background: "none", border: "none",
                 cursor: "pointer", color: bookmarked ? "#e2b714" : "#646669", padding: 0, transition: "color 0.15s",
@@ -816,7 +866,7 @@ function PostCard({
               <BookmarkIcon filled={bookmarked} />
             </button>
 
-            <button onClick={() => setShowComments((v) => !v)}
+            <button onClick={(e) => { e.stopPropagation(); setShowComments((v) => !v); }}
               style={{
                 display: "flex", alignItems: "center", gap: 6, background: "none", border: "none",
                 cursor: "pointer", color: "#646669", padding: 0, transition: "color 0.15s",
@@ -824,6 +874,11 @@ function PostCard({
               <CommentIcon />
               <span style={{ fontSize: 13 }}>{localComments.length}</span>
             </button>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 4, color: "#646669", fontSize: 13 }}>
+              <ViewsIcon />
+              <span>{post.views ?? 0}</span>
+            </div>
 
             {isOwner && (
               <div style={{ display: "flex", gap: 8, marginLeft: "auto", alignItems: "center" }}>
@@ -1009,6 +1064,7 @@ function EditProfileModal({
   onSave: (newUsername: string, newPfpUrl: string | null) => void;
 }) {
   const [newUsername, setNewUsername] = useState(currentUser.username);
+  const [newHandle, setNewHandle] = useState("");
   const [pfpFile, setPfpFile] = useState<File | null>(null);
   const [pfpPreview, setPfpPreview] = useState<string | null>(currentUser.pfp_url);
   const [error, setError] = useState("");
@@ -1020,10 +1076,11 @@ function EditProfileModal({
     async function fetchProfile() {
       const { data } = await supabase
         .from("profiles")
-        .select("username_last_changed")
+        .select("username_last_changed, handle")
         .eq("id", currentUser.id)
         .single();
       if (data?.username_last_changed) setUsernameLastChanged(data.username_last_changed);
+      if (data?.handle) setNewHandle(data.handle);
     }
     fetchProfile();
   }, [currentUser.id]);
@@ -1101,6 +1158,8 @@ function EditProfileModal({
       updateData.username = newUsername;
       updateData.username_last_changed = new Date().toISOString();
     }
+    // Save handle — default to lowercase username if empty
+    updateData.handle = newHandle.trim() || newUsername.toLowerCase();
     await supabase.from("profiles").update(updateData).eq("id", currentUser.id);
 
     // Update all posts by this user
@@ -1188,7 +1247,7 @@ function EditProfileModal({
 
         {/* Username section */}
         <div>
-          <label style={{ color: "#646669", fontSize: 12, display: "block", marginBottom: 6 }}>Username</label>
+          <label style={{ color: "#646669", fontSize: 12, display: "block", marginBottom: 6 }}>Display Name</label>
           <input
             value={newUsername}
             onChange={(e) => {
@@ -1210,6 +1269,22 @@ function EditProfileModal({
               You can change your username again in {daysUntilUsernameChange} day(s).
             </div>
           )}
+        </div>
+
+        {/* Handle section */}
+        <div>
+          <label style={{ color: "#646669", fontSize: 12, display: "block", marginBottom: 6 }}>Handle <span style={{ opacity: 0.5 }}>(lowercase, no spaces)</span></label>
+          <input
+            value={newHandle}
+            onChange={(e) => setNewHandle(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 16))}
+            maxLength={16}
+            placeholder={newUsername.toLowerCase()}
+            style={{
+              width: "100%", background: "#3a3d42", border: "1px solid #3a3d42", borderRadius: 8,
+              padding: "10px 14px", color: "#fff", fontSize: 14, fontFamily: "inherit",
+              outline: "none", boxSizing: "border-box",
+            }} />
+          <div style={{ color: "#646669", fontSize: 11, marginTop: 4 }}>@{newHandle || newUsername.toLowerCase()}</div>
         </div>
 
         {error && <div style={{ color: "#ca4754", fontSize: 13 }}>{error}</div>}
@@ -1591,8 +1666,13 @@ export default function Home() {
     try { return JSON.parse(localStorage.getItem("mp_linked_accounts") ?? "[]"); } catch { return []; }
   });
 
-  // Shadowbanned users — loaded once, only used for display filtering
-  const [shadowbannedUsers, setShadowbannedUsers] = useState<Set<string>>(new Set());
+  // Blocked users
+  const [blockedUsers, setBlockedUsers] = useState<Set<string>>(new Set());
+
+  async function loadBlockedUsers(userId: string) {
+    const { data } = await supabase.from("blocks").select("blocked_id").eq("blocker_id", userId);
+    if (data) setBlockedUsers(new Set(data.map((b: { blocked_id: string }) => b.blocked_id)));
+  }  const [shadowbannedUsers, setShadowbannedUsers] = useState<Set<string>>(new Set());
 
   async function loadShadowbannedUsers() {
     const { data } = await supabase.from("profiles").select("username").eq("shadowbanned", true);
@@ -1676,6 +1756,7 @@ export default function Home() {
           await loadPostsInner();
           await loadNotifications(session.user.id);
           await loadShadowbannedUsers();
+          await loadBlockedUsers(session.user.id);
           setStep("app");
           return;
         }
@@ -1790,6 +1871,7 @@ export default function Home() {
     await loadPosts();
     await loadNotifications(authData.user.id);
     await loadShadowbannedUsers();
+    await loadBlockedUsers(authData.user.id);
     setStep("app");
   }
 
@@ -1988,7 +2070,17 @@ export default function Home() {
     await supabase.from("posts").update({ content: newContent, edited: true }).eq("id", postId);
   }
 
-  async function handleAdminDelete(postId: string) {
+  async function handleRepost(postId: string) {
+    if (!currentUser) return;
+    const post = posts.find((p) => p.id === postId);
+    if (!post) return;
+    const reposted = (post.reposted_by ?? []).includes(currentUser.id);
+    const newRepostedBy = reposted
+      ? post.reposted_by.filter((id) => id !== currentUser.id)
+      : [...(post.reposted_by ?? []), currentUser.id];
+    setPosts((prev) => prev.map((p) => p.id === postId ? { ...p, reposted_by: newRepostedBy } : p));
+    await supabase.from("posts").update({ reposted_by: newRepostedBy }).eq("id", postId);
+  }
     setPosts((prev) => prev.filter((p) => p.id !== postId));
     await supabase.from("posts").delete().eq("id", postId);
   }
@@ -2461,6 +2553,8 @@ export default function Home() {
                 <div key={post.id} ref={(el) => { postRefs.current[index] = el; }}>
                   <PostCard post={post} currentUser={currentUser}
                     onLike={handleLike} onBookmark={handleBookmark} onDelete={handleDelete} onEdit={handleEdit}
+                    onRepost={handleRepost}
+                    blockedUsers={blockedUsers}
                     isAdmin={currentUser?.username.toLowerCase() === ADMIN_USER}
                     isShadowbanned={shadowbannedUsers.has(post.username.toLowerCase())}
                     onAdminDelete={handleAdminDelete}
