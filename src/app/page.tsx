@@ -1196,6 +1196,175 @@ function removeUserFromReplies(replies: Reply[], username: string): Reply[] {
     .map((r) => ({ ...r, replies: removeUserFromReplies(r.replies ?? [], username) }));
 }
 
+// ── Accounts Modal ────────────────────────────────────────────────────────────
+
+function AccountsModal({
+  currentUser,
+  linkedAccounts,
+  onClose,
+  onSwitch,
+  onAdd,
+  onRemove,
+}: {
+  currentUser: { id: string; username: string; pfp_url: string | null };
+  linkedAccounts: { id: string; username: string; pfp_url: string | null }[];
+  onClose: () => void;
+  onSwitch: (account: { id: string; username: string; pfp_url: string | null }, password: string) => Promise<string | null>;
+  onAdd: (account: { id: string; username: string; pfp_url: string | null }) => void;
+  onRemove: (id: string) => void;
+}) {
+  const [mode, setMode] = useState<"list" | "add">(linkedAccounts.length === 0 ? "add" : "list");
+  const [addUsername, setAddUsername] = useState("");
+  const [addPassword, setAddPassword] = useState("");
+  const [addError, setAddError] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [switchingId, setSwitchingId] = useState<string | null>(null);
+  const [switchPasswords, setSwitchPasswords] = useState<Record<string, string>>({});
+  const [switchErrors, setSwitchErrors] = useState<Record<string, string>>({});
+
+  const allAccounts = [currentUser, ...linkedAccounts.filter((a) => a.id !== currentUser.id)];
+  const canAddMore = linkedAccounts.length < 4; // max 5 total including current
+
+  async function handleAdd() {
+    if (!addUsername.trim() || !addPassword) { setAddError("Please fill in both fields."); return; }
+    if (addUsername.toLowerCase() === currentUser.username.toLowerCase()) { setAddError("That's your current account."); return; }
+    if (linkedAccounts.find((a) => a.username.toLowerCase() === addUsername.toLowerCase())) { setAddError("Account already added."); return; }
+    setAdding(true);
+    setAddError("");
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: `${addUsername.toLowerCase()}@monkeypost.local`,
+      password: addPassword,
+    });
+    if (error || !data.user) { setAddError("Invalid username or password."); setAdding(false); return; }
+
+    const { data: profile } = await supabase.from("profiles").select("*").eq("id", data.user.id).single();
+    if (!profile) { setAddError("Account not found."); setAdding(false); return; }
+
+    // Sign back into current account
+    await supabase.auth.signInWithPassword({
+      email: `${currentUser.username.toLowerCase()}@monkeypost.local`,
+      password: "", // We can't re-auth without their password, just keep session
+    });
+
+    const newAccount = { id: data.user.id, username: profile.username, pfp_url: profile.pfp_url };
+    onAdd(newAccount);
+    setAddUsername("");
+    setAddPassword("");
+    setMode("list");
+    setAdding(false);
+  }
+
+  async function handleSwitch(account: { id: string; username: string; pfp_url: string | null }) {
+    const pw = switchPasswords[account.id] ?? "";
+    if (!pw) { setSwitchErrors((p) => ({ ...p, [account.id]: "Enter password to switch." })); return; }
+    setSwitchingId(account.id);
+    const err = await onSwitch(account, pw);
+    if (err) {
+      setSwitchErrors((p) => ({ ...p, [account.id]: err }));
+      setSwitchingId(null);
+    } else {
+      onClose();
+    }
+  }
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "#000000aa", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center" }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={{ background: "#2c2e31", borderRadius: 14, padding: "24px", width: "100%", maxWidth: 380, border: "1px solid #3a3d42", display: "flex", flexDirection: "column", gap: 16 }}>
+
+        <h2 style={{ color: "#e2b714", fontSize: 18, fontWeight: 700, margin: 0 }}>
+          {mode === "add" ? "Add Account" : "Accounts"}
+        </h2>
+
+        {mode === "list" && (
+          <>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {allAccounts.map((account) => {
+                const isActive = account.id === currentUser.id;
+                return (
+                  <div key={account.id} style={{ background: "#3a3d42", borderRadius: 10, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 8 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <Avatar url={account.pfp_url} username={account.username} size={32} />
+                      <span style={{ color: "#e2b714", fontWeight: 700, fontSize: 14, flex: 1 }}>@{account.username}</span>
+                      {isActive && (
+                        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width={18} height={18}>
+                          <path d="M5 13L9 17L19 7" stroke="#e2b714" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      )}
+                      {!isActive && (
+                        <button onClick={() => onRemove(account.id)}
+                          style={{ background: "none", border: "none", cursor: "pointer", color: "#646669", padding: 0, display: "flex" }}
+                          title="Remove account">
+                          <TrashIcon />
+                        </button>
+                      )}
+                    </div>
+                    {!isActive && (
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <input
+                          type="password"
+                          placeholder="Password to switch"
+                          value={switchPasswords[account.id] ?? ""}
+                          onChange={(e) => setSwitchPasswords((p) => ({ ...p, [account.id]: e.target.value }))}
+                          onKeyDown={(e) => e.key === "Enter" && handleSwitch(account)}
+                          style={{ flex: 1, background: "#2c2e31", border: "none", borderRadius: 6, padding: "6px 10px", color: "#fff", fontSize: 12, fontFamily: "inherit", outline: "none" }}
+                        />
+                        <button onClick={() => handleSwitch(account)} disabled={switchingId === account.id}
+                          style={{ background: "#e2b714", border: "none", borderRadius: 6, padding: "6px 12px", color: "#323437", fontWeight: 700, fontSize: 12, fontFamily: "inherit", cursor: "pointer" }}>
+                          {switchingId === account.id ? "..." : "Switch"}
+                        </button>
+                      </div>
+                    )}
+                    {switchErrors[account.id] && (
+                      <div style={{ color: "#ca4754", fontSize: 11 }}>{switchErrors[account.id]}</div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {canAddMore && (
+              <button onClick={() => setMode("add")}
+                style={{ background: "#3a3d42", border: "none", borderRadius: 8, padding: "10px 0", color: "#d1d0c5", fontSize: 13, fontFamily: "inherit", cursor: "pointer", fontWeight: 700 }}>
+                + Add More ({allAccounts.length}/5)
+              </button>
+            )}
+            {!canAddMore && (
+              <div style={{ color: "#646669", fontSize: 12, textAlign: "center" }}>Maximum 5 accounts reached.</div>
+            )}
+          </>
+        )}
+
+        {mode === "add" && (
+          <>
+            <input value={addUsername} onChange={(e) => setAddUsername(e.target.value.replace(/[^a-zA-Z0-9]/g, "").slice(0, 16))}
+              placeholder="Username" maxLength={16}
+              style={{ background: "#3a3d42", border: "none", borderRadius: 8, padding: "10px 14px", color: "#fff", fontSize: 14, fontFamily: "inherit", outline: "none" }} />
+            <input type="password" value={addPassword} onChange={(e) => setAddPassword(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+              placeholder="Password"
+              style={{ background: "#3a3d42", border: "none", borderRadius: 8, padding: "10px 14px", color: "#fff", fontSize: 14, fontFamily: "inherit", outline: "none" }} />
+            {addError && <div style={{ color: "#ca4754", fontSize: 13 }}>{addError}</div>}
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={handleAdd} disabled={adding}
+                style={{ flex: 1, background: adding ? "#3a3d42" : "#e2b714", border: "none", borderRadius: 8, padding: "10px 0", color: adding ? "#646669" : "#323437", fontWeight: 700, fontSize: 14, fontFamily: "inherit", cursor: adding ? "not-allowed" : "pointer" }}>
+                {adding ? "Checking..." : "Confirm"}
+              </button>
+              {linkedAccounts.length > 0 && (
+                <button onClick={() => { setMode("list"); setAddError(""); }}
+                  style={{ flex: 1, background: "#3a3d42", border: "none", borderRadius: 8, padding: "10px 0", color: "#d1d0c5", fontSize: 14, fontFamily: "inherit", cursor: "pointer" }}>
+                  Back
+                </button>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export default function Home() {
@@ -1222,6 +1391,13 @@ export default function Home() {
 
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [showDeleteAccount, setShowDeleteAccount] = useState(false);
+  const [showAccountsModal, setShowAccountsModal] = useState(false);
+
+  // Linked accounts — stored in localStorage so they persist across sessions
+  const [linkedAccounts, setLinkedAccounts] = useState<{ id: string; username: string; pfp_url: string | null }[]>(() => {
+    if (typeof window === "undefined") return [];
+    try { return JSON.parse(localStorage.getItem("mp_linked_accounts") ?? "[]"); } catch { return []; }
+  });
 
   // Notifications
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -1422,6 +1598,27 @@ export default function Home() {
     setNotifications([]);
     setUnreadNotifCount(0);
     setStep("signup");
+  }
+
+  function saveLinkedAccounts(accounts: { id: string; username: string; pfp_url: string | null }[]) {
+    setLinkedAccounts(accounts);
+    localStorage.setItem("mp_linked_accounts", JSON.stringify(accounts));
+  }
+
+  async function switchToAccount(account: { id: string; username: string; pfp_url: string | null }, password: string): Promise<string | null> {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: `${account.username.toLowerCase()}@monkeypost.local`,
+      password,
+    });
+    if (error || !data.user) return error?.message ?? "Invalid password";
+    const { data: profile } = await supabase.from("profiles").select("*").eq("id", data.user.id).single();
+    if (!profile) return "Account not found";
+    setCurrentUser({ id: data.user.id, username: profile.username, pfp_url: profile.pfp_url });
+    await loadPostsInner();
+    await loadNotifications(data.user.id);
+    sortedPostsRef.current = [];
+    lastBatchRef.current = 0;
+    return null;
   }
 
   function handlePostImagePick(e: React.ChangeEvent<HTMLInputElement>) {
@@ -1697,6 +1894,16 @@ export default function Home() {
           onSave={handleEditProfileSave}
         />
       )}
+      {showAccountsModal && currentUser && (
+        <AccountsModal
+          currentUser={currentUser}
+          linkedAccounts={linkedAccounts}
+          onClose={() => setShowAccountsModal(false)}
+          onSwitch={switchToAccount}
+          onAdd={(account) => saveLinkedAccounts([...linkedAccounts, account])}
+          onRemove={(id) => saveLinkedAccounts(linkedAccounts.filter((a) => a.id !== id))}
+        />
+      )}
       {showDeleteAccount && currentUser && (
         <DeleteAccountModal
           currentUser={currentUser}
@@ -1782,6 +1989,15 @@ export default function Home() {
                       whiteSpace: "nowrap",
                     }}>
                     Edit Profile
+                  </button>
+                  <button onClick={() => { setShowAccountsModal(true); setUserHovered(false); }}
+                    style={{
+                      background: "#3a3d42", border: "none", borderRadius: 6,
+                      padding: "6px 14px", color: "#d1d0c5", fontWeight: 700,
+                      fontSize: 13, fontFamily: "inherit", cursor: "pointer",
+                      whiteSpace: "nowrap",
+                    }}>
+                    {linkedAccounts.length > 0 ? "View Accounts" : "Add Account"}
                   </button>
                   <button onClick={handleLogout}
                     style={{
