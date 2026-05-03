@@ -15,10 +15,9 @@ function getTwemojiUrl(emoji: string): string {
   return `https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/${cp}.svg`;
 }
 
-// Renders text with emoji images, blue clickable links, and blue @mentions
+// Renders text with emoji images, blue clickable links, blue @mentions, and blue #tags
 function renderWithTwemoji(text: string, onMentionClick?: (username: string) => void): React.ReactNode[] {
-  // Split by URLs, @mentions, then handle emojis within plain segments
-  const tokenRegex = /(https?:\/\/[^\s]+|(?<!\w)(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+(?:com|net|org|io|dev|app|co|gg|tv|me|uk|us|ca|au)[^\s]*|(?<![a-zA-Z0-9])@[a-zA-Z0-9]{1,16})/g;
+  const tokenRegex = /(https?:\/\/[^\s]+|(?<!\w)(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+(?:com|net|org|io|dev|app|co|gg|tv|me|uk|us|ca|au)[^\s]*|(?<![a-zA-Z0-9])@[a-zA-Z0-9]{1,16}|(?<![a-zA-Z0-9])#[a-zA-Z0-9_]{1,32})/g;
   const emojiRegex = /(\p{Emoji_Presentation}|\p{Extended_Pictographic})/gu;
 
   const nodes: React.ReactNode[] = [];
@@ -49,7 +48,17 @@ function renderWithTwemoji(text: string, onMentionClick?: (username: string) => 
       nodes.push(...renderEmojis(text.slice(last, match.index)));
     }
     const token = match[0];
-    if (token.startsWith("@")) {
+    if (token.startsWith("#")) {
+      const tag = token.slice(1);
+      nodes.push(
+        <a key={keyIdx++}
+          href={`/search/%23${tag}`}
+          style={{ color: "#4a9eff", fontWeight: 600, textDecoration: "none", cursor: "pointer" }}
+          onClick={(e) => e.stopPropagation()}>
+          {token}
+        </a>
+      );
+    } else if (token.startsWith("@")) {
       const username = token.slice(1);
       nodes.push(
         <span key={keyIdx++}
@@ -59,7 +68,6 @@ function renderWithTwemoji(text: string, onMentionClick?: (username: string) => 
         </span>
       );
     } else {
-      // It's a URL
       let href = token;
       if (!href.startsWith("http")) href = "https://" + href;
       nodes.push(
@@ -97,52 +105,65 @@ async function getBlockedWords(): Promise<string[]> {
 function normalizeText(text: string): string {
   return text
     .toLowerCase()
-    .replace(/0/g, "o")
-    .replace(/1/g, "i")
-    .replace(/3/g, "e")
-    .replace(/4/g, "a")
-    .replace(/5/g, "s")
-    .replace(/8/g, "b")
-    .replace(/@/g, "a")
-    .replace(/\$/g, "s")
-    .replace(/\*/g, "")
+    // Homoglyph detection — Cyrillic and unicode lookalikes
+    .replace(/а/g, "a").replace(/е/g, "e").replace(/о/g, "o")
+    .replace(/р/g, "p").replace(/с/g, "c").replace(/х/g, "x")
+    .replace(/ѕ/g, "s").replace(/і/g, "i").replace(/ј/g, "j")
+    // Leetspeak
+    .replace(/0/g, "o").replace(/1/g, "i").replace(/3/g, "e")
+    .replace(/4/g, "a").replace(/5/g, "s").replace(/6/g, "g")
+    .replace(/7/g, "t").replace(/8/g, "b").replace(/9/g, "g")
+    .replace(/@/g, "a").replace(/\$/g, "s").replace(/\|/g, "i")
+    .replace(/\(/g, "c").replace(/\+/g, "t").replace(/!/g, "i")
+    // Remove non-alpha
     .replace(/[^a-z\s]/g, "");
 }
 
-// Words that are short/ambiguous and should only match as whole words
-const WHOLE_WORD_ONLY = new Set([
-  "ass", "sex", "cum", "bj", "mf", "nut", "wet", "lay", "raw", "bang", "bone",
-  "bust", "drip", "pipe", "rail", "shag", "simp", "smash", "thot", "hoe",
-  "clit", "tit", "ass", "balls", "anal",
-]);
+function collapseRepeats(text: string): string {
+  // "seeeex" → "sex", "fuuuck" → "fuk" → normalized to "fuc"
+  return text.replace(/(.)\1{2,}/g, "$1$1");
+}
+
+function removeSpacingBypass(text: string): string {
+  // "s e x" or "s.e.x" or "s-e-x" → "sex"
+  return text.replace(/(\b\w)\s*[\s.\-_*]+\s*(?=\w\b)/g, "$1");
+}
 
 async function containsBlockedWord(text: string): Promise<boolean> {
   const blocked = await getBlockedWords();
 
-  // Strip URLs and @mentions before checking — they shouldn't be filtered
+  // Strip URLs and @mentions before checking
   const stripped = text
     .replace(/https?:\/\/[^\s]+/g, "")
     .replace(/(?<!\w)(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+(?:com|net|org|io|dev|app|co|gg|tv|me|uk|us|ca|au)[^\s]*/g, "")
     .replace(/@[a-zA-Z0-9]{1,16}/g, "");
 
-  const normalized = normalizeText(stripped);
-  const plain = stripped.toLowerCase().replace(/[^a-z0-9\s]/g, "");
+  // Apply all normalizations
+  const processed = normalizeText(collapseRepeats(removeSpacingBypass(stripped)));
 
-  for (const word of blocked) {
-    const normWord = normalizeText(word);
-    const cleanWord = word.toLowerCase().replace(/[^a-z0-9\s]/g, "");
+  // Split into words for word-boundary checking
+  const words = processed.split(/\s+/);
 
-    if (WHOLE_WORD_ONLY.has(cleanWord) || WHOLE_WORD_ONLY.has(normWord)) {
-      // Whole-word match only
-      const wordBoundaryRegex = new RegExp(`(?<![a-z])${normWord.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![a-z])`, "i");
-      if (wordBoundaryRegex.test(normalized)) return true;
-    } else {
-      // Substring match for longer/unambiguous words
-      if (normalized.includes(normWord) || plain.includes(cleanWord)) {
-        return true;
-      }
+  for (const blockedWord of blocked) {
+    const normalizedBlocked = normalizeText(blockedWord);
+
+    // Check each individual word (prevents "database" → "ass" false positive)
+    for (const word of words) {
+      if (word === normalizedBlocked) return true;
+    }
+
+    // For multi-word blocked phrases, check the full processed string with word boundaries
+    if (normalizedBlocked.includes(" ")) {
+      const escaped = normalizedBlocked.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      if (new RegExp(`\\b${escaped}\\b`).test(processed)) return true;
+    }
+
+    // For longer unambiguous words, still do substring check (e.g. "blowjob" inside "blowjobs")
+    if (normalizedBlocked.length >= 6) {
+      if (processed.includes(normalizedBlocked)) return true;
     }
   }
+
   return false;
 }
 
@@ -2199,8 +2220,25 @@ export default function Home() {
         />
       )}
 
-      <div style={{ width: "100%", padding: "16px 32px", borderBottom: "1px solid #3a3d42", display: "flex", alignItems: "center", position: "sticky", top: 0, background: "#323437", zIndex: 10 }}>
+      <div style={{ width: "100%", padding: "16px 32px", borderBottom: "1px solid #3a3d42", display: "flex", alignItems: "center", gap: 16, position: "sticky", top: 0, background: "#323437", zIndex: 10 }}>
         <span style={{ fontSize: 22, fontWeight: 700, color: "#e2b714", letterSpacing: "-0.5px" }}>monkeypost</span>
+        <a href="/search"
+          style={{
+            marginLeft: "auto", display: "flex", alignItems: "center", gap: 8,
+            background: "#2c2e31", border: "1px solid #3a3d42", borderRadius: 8,
+            padding: "7px 14px", color: "#646669", fontSize: 13,
+            fontFamily: "inherit", textDecoration: "none", cursor: "pointer",
+            transition: "border-color 0.15s",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.borderColor = "#646669")}
+          onMouseLeave={(e) => (e.currentTarget.style.borderColor = "#3a3d42")}
+        >
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width={15} height={15}>
+            <path d="M11 19C15.4183 19 19 15.4183 19 11C19 6.58172 15.4183 3 11 3C6.58172 3 3 6.58172 3 11C3 15.4183 6.58172 19 11 19Z" stroke="#646669" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M21 21L16.65 16.65" stroke="#646669" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          Search tags
+        </a>
       </div>
 
       <div style={{ display: "flex", flex: 1, maxWidth: 1100, margin: "0 auto", width: "100%", padding: "0 16px" }}>
