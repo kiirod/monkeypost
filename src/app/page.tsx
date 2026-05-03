@@ -1524,6 +1524,9 @@ export default function Home() {
     const { data } = await supabase.from("profiles").select("username").eq("shadowbanned", true);
     if (data) setShadowbannedUsers(new Set(data.map((p: { username: string }) => p.username.toLowerCase())));
   }
+
+  // Notifications
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
 
   // Pagination
