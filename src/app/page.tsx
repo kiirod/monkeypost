@@ -2081,6 +2081,11 @@ export default function Home() {
     setPosts((prev) => prev.map((p) => p.id === postId ? { ...p, reposted_by: newRepostedBy } : p));
     await supabase.from("posts").update({ reposted_by: newRepostedBy }).eq("id", postId);
   }
+
+  async function handleDelete(postId: string) {
+    if (!currentUser) return;
+    const post = posts.find((p) => p.id === postId);
+    if (!post || post.user_id !== currentUser.id) return;
     setPosts((prev) => prev.filter((p) => p.id !== postId));
     await supabase.from("posts").delete().eq("id", postId);
   }
