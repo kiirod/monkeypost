@@ -403,6 +403,8 @@ function ReplyItem({
   commentId,
   replyPath,
   onUpdate,
+  isAdmin,
+  isShadowbannedUser,
 }: {
   reply: Reply;
   depth: number;
@@ -411,11 +413,29 @@ function ReplyItem({
   commentId: string;
   replyPath: number[];
   onUpdate: (updatedComments: Comment[]) => void;
+  isAdmin: boolean;
+  isShadowbannedUser: (username: string) => boolean;
 }) {
   const [showReplyInput, setShowReplyInput] = useState(false);
   const [replyText, setReplyText] = useState("");
   const [replyError, setReplyError] = useState("");
   const isOwner = currentUser?.username === reply.username;
+  const replyIsShadowbanned = isShadowbannedUser(reply.username);
+
+  async function adminDeleteReply() {
+    const { data: postData } = await supabase.from("posts").select("comments").eq("id", postId).single();
+    if (!postData) return;
+    const comments: Comment[] = postData.comments ?? [];
+    function removeReply(list: Reply[], path: number[]): Reply[] {
+      if (path.length === 1) return list.filter((_, i) => i !== path[0]);
+      return list.map((r, i) => i === path[0] ? { ...r, replies: removeReply(r.replies ?? [], path.slice(1)) } : r);
+    }
+    const updated = comments.map((c) =>
+      c.id === commentId ? { ...c, replies: removeReply(c.replies ?? [], replyPath) } : c
+    );
+    await supabase.from("posts").update({ comments: updated }).eq("id", postId);
+    onUpdate(updated);
+  }
 
   async function submitNestedReply() {
     if (!replyText.trim() || !currentUser) return;
@@ -491,6 +511,17 @@ function ReplyItem({
           <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 2 }}>
             <span style={{ color: "#e2b714", fontSize: fontSize - 1, fontWeight: 700 }}>@{reply.username}</span>
             {VERIFIED_USERS.has(reply.username.toLowerCase()) && <OwnerBadge />}
+            {replyIsShadowbanned && isAdmin && (
+              <span style={{ color: "#ca4754", fontSize: 10, background: "#ca475422", borderRadius: 4, padding: "1px 6px" }}>shadowbanned</span>
+            )}
+            {isAdmin && reply.username.toLowerCase() !== ADMIN_USER && (
+              <div style={{ display: "flex", gap: 4, marginLeft: 4 }}>
+                <button onClick={adminDeleteReply} title="Admin delete reply"
+                  style={{ background: "none", border: "none", cursor: "pointer", color: "#ca4754", padding: 0, display: "flex", opacity: 0.7 }}>
+                  <TrashIcon />
+                </button>
+              </div>
+            )}
           </div>
           <div style={{ color: "#d1d0c5", fontSize, lineHeight: 1.4, wordBreak: "break-word" }}>
             {renderWithTwemoji(reply.content)}
@@ -530,7 +561,8 @@ function ReplyItem({
           )}
           {(reply.replies ?? []).map((r, i) => (
             <ReplyItem key={r.id} reply={r} depth={depth + 1} currentUser={currentUser}
-              postId={postId} commentId={commentId} replyPath={[...replyPath, i]} onUpdate={onUpdate} />
+              postId={postId} commentId={commentId} replyPath={[...replyPath, i]} onUpdate={onUpdate}
+              isAdmin={isAdmin} isShadowbannedUser={isShadowbannedUser} />
           ))}
         </div>
       </div>
@@ -805,6 +837,18 @@ function PostCard({
                       <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 2 }}>
                         <span style={{ color: "#e2b714", fontSize: 12, fontWeight: 700 }}>@{c.username}</span>
                         {VERIFIED_USERS.has(c.username.toLowerCase()) && <OwnerBadge />}
+                        {isAdmin && c.username.toLowerCase() !== ADMIN_USER && (
+                          <div style={{ display: "flex", gap: 4, marginLeft: 4 }}>
+                            <button onClick={async () => {
+                              const updated = localComments.filter((lc) => lc.id !== c.id);
+                              setLocalComments(updated);
+                              await supabase.from("posts").update({ comments: updated }).eq("id", post.id);
+                            }} title="Admin delete comment"
+                              style={{ background: "none", border: "none", cursor: "pointer", color: "#ca4754", padding: 0, display: "flex", opacity: 0.7 }}>
+                              <TrashIcon />
+                            </button>
+                          </div>
+                        )}
                       </div>
                       <div style={{ color: "#d1d0c5", fontSize: 13, lineHeight: 1.4, wordBreak: "break-word", marginBottom: 3 }}>{renderWithTwemoji(c.content)}</div>
                       <div style={{ display: "flex", gap: 10, marginTop: 3 }}>
@@ -822,7 +866,8 @@ function PostCard({
                       </div>
                       {(c.replies ?? []).map((r, ri) => (
                         <ReplyItem key={r.id} reply={r} depth={1} currentUser={currentUser}
-                          postId={post.id} commentId={c.id} replyPath={[ri]} onUpdate={handleCommentsUpdate} />
+                          postId={post.id} commentId={c.id} replyPath={[ri]} onUpdate={handleCommentsUpdate}
+                          isAdmin={isAdmin} isShadowbannedUser={(u) => isShadowbanned} />
                       ))}
                     </div>
                   </div>
