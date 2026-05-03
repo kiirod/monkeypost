@@ -1210,7 +1210,7 @@ function AccountsModal({
   linkedAccounts: { id: string; username: string; pfp_url: string | null }[];
   onClose: () => void;
   onSwitch: (account: { id: string; username: string; pfp_url: string | null }, password: string) => Promise<string | null>;
-  onAdd: (account: { id: string; username: string; pfp_url: string | null }) => void;
+  onAdd: (account: { id: string; username: string; pfp_url: string | null }, password: string) => void;
   onRemove: (id: string) => void;
 }) {
   const [mode, setMode] = useState<"list" | "add">(linkedAccounts.length === 0 ? "add" : "list");
@@ -1219,11 +1219,10 @@ function AccountsModal({
   const [addError, setAddError] = useState("");
   const [adding, setAdding] = useState(false);
   const [switchingId, setSwitchingId] = useState<string | null>(null);
-  const [switchPasswords, setSwitchPasswords] = useState<Record<string, string>>({});
-  const [switchErrors, setSwitchErrors] = useState<Record<string, string>>({});
+  const [switchError, setSwitchError] = useState<string>("");
 
   const allAccounts = [currentUser, ...linkedAccounts.filter((a) => a.id !== currentUser.id)];
-  const canAddMore = linkedAccounts.length < 4; // max 5 total including current
+  const canAddMore = linkedAccounts.length < 4;
 
   async function handleAdd() {
     if (!addUsername.trim() || !addPassword) { setAddError("Please fill in both fields."); return; }
@@ -1232,23 +1231,37 @@ function AccountsModal({
     setAdding(true);
     setAddError("");
 
+    // Get the current session token BEFORE signing in to the new account
+    const { data: { session: currentSession } } = await supabase.auth.getSession();
+
+    // Verify the new account credentials
     const { data, error } = await supabase.auth.signInWithPassword({
       email: `${addUsername.toLowerCase()}@monkeypost.local`,
       password: addPassword,
     });
-    if (error || !data.user) { setAddError("Invalid username or password."); setAdding(false); return; }
+
+    if (error || !data.user) {
+      // Restore the original session
+      if (currentSession?.refresh_token) {
+        await supabase.auth.refreshSession({ refresh_token: currentSession.refresh_token });
+      }
+      setAddError("Invalid username or password.");
+      setAdding(false);
+      return;
+    }
 
     const { data: profile } = await supabase.from("profiles").select("*").eq("id", data.user.id).single();
+
+    // Restore back to the original account immediately
+    if (currentSession?.refresh_token) {
+      await supabase.auth.refreshSession({ refresh_token: currentSession.refresh_token });
+    }
+
     if (!profile) { setAddError("Account not found."); setAdding(false); return; }
 
-    // Sign back into current account
-    await supabase.auth.signInWithPassword({
-      email: `${currentUser.username.toLowerCase()}@monkeypost.local`,
-      password: "", // We can't re-auth without their password, just keep session
-    });
-
     const newAccount = { id: data.user.id, username: profile.username, pfp_url: profile.pfp_url };
-    onAdd(newAccount);
+    // Pass password so we can switch to it later without re-entering
+    onAdd(newAccount, addPassword);
     setAddUsername("");
     setAddPassword("");
     setMode("list");
@@ -1256,12 +1269,20 @@ function AccountsModal({
   }
 
   async function handleSwitch(account: { id: string; username: string; pfp_url: string | null }) {
-    const pw = switchPasswords[account.id] ?? "";
-    if (!pw) { setSwitchErrors((p) => ({ ...p, [account.id]: "Enter password to switch." })); return; }
+    if (account.id === currentUser.id) return;
     setSwitchingId(account.id);
+    setSwitchError("");
+    // Password was saved when the account was added
+    const saved = JSON.parse(localStorage.getItem("mp_account_passwords") ?? "{}");
+    const pw = saved[account.id];
+    if (!pw) {
+      setSwitchError("Password not found, try removing and re-adding this account.");
+      setSwitchingId(null);
+      return;
+    }
     const err = await onSwitch(account, pw);
     if (err) {
-      setSwitchErrors((p) => ({ ...p, [account.id]: err }));
+      setSwitchError(err);
       setSwitchingId(null);
     } else {
       onClose();
@@ -1279,45 +1300,41 @@ function AccountsModal({
 
         {mode === "list" && (
           <>
+            {switchError && <div style={{ color: "#ca4754", fontSize: 12 }}>{switchError}</div>}
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {allAccounts.map((account) => {
                 const isActive = account.id === currentUser.id;
+                const isSwitching = switchingId === account.id;
                 return (
-                  <div key={account.id} style={{ background: "#3a3d42", borderRadius: 10, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 8 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <Avatar url={account.pfp_url} username={account.username} size={32} />
-                      <span style={{ color: "#e2b714", fontWeight: 700, fontSize: 14, flex: 1 }}>@{account.username}</span>
-                      {isActive && (
-                        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width={18} height={18}>
-                          <path d="M5 13L9 17L19 7" stroke="#e2b714" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      )}
-                      {!isActive && (
-                        <button onClick={() => onRemove(account.id)}
-                          style={{ background: "none", border: "none", cursor: "pointer", color: "#646669", padding: 0, display: "flex" }}
-                          title="Remove account">
-                          <TrashIcon />
-                        </button>
-                      )}
-                    </div>
-                    {!isActive && (
-                      <div style={{ display: "flex", gap: 6 }}>
-                        <input
-                          type="password"
-                          placeholder="Password to switch"
-                          value={switchPasswords[account.id] ?? ""}
-                          onChange={(e) => setSwitchPasswords((p) => ({ ...p, [account.id]: e.target.value }))}
-                          onKeyDown={(e) => e.key === "Enter" && handleSwitch(account)}
-                          style={{ flex: 1, background: "#2c2e31", border: "none", borderRadius: 6, padding: "6px 10px", color: "#fff", fontSize: 12, fontFamily: "inherit", outline: "none" }}
-                        />
-                        <button onClick={() => handleSwitch(account)} disabled={switchingId === account.id}
-                          style={{ background: "#e2b714", border: "none", borderRadius: 6, padding: "6px 12px", color: "#323437", fontWeight: 700, fontSize: 12, fontFamily: "inherit", cursor: "pointer" }}>
-                          {switchingId === account.id ? "..." : "Switch"}
-                        </button>
-                      </div>
+                  <div key={account.id}
+                    onClick={() => !isActive && handleSwitch(account)}
+                    style={{
+                      background: "#3a3d42", borderRadius: 10, padding: "12px 14px",
+                      display: "flex", alignItems: "center", gap: 10,
+                      cursor: isActive ? "default" : "pointer",
+                      border: isActive ? "1px solid #e2b714" : "1px solid transparent",
+                      transition: "border 0.15s, background 0.15s",
+                      opacity: isSwitching ? 0.6 : 1,
+                    }}
+                    onMouseEnter={(e) => { if (!isActive) (e.currentTarget as HTMLDivElement).style.background = "#464a50"; }}
+                    onMouseLeave={(e) => { if (!isActive) (e.currentTarget as HTMLDivElement).style.background = "#3a3d42"; }}
+                  >
+                    <Avatar url={account.pfp_url} username={account.username} size={32} />
+                    <span style={{ color: "#e2b714", fontWeight: 700, fontSize: 14, flex: 1 }}>
+                      @{account.username}
+                      {isSwitching && <span style={{ color: "#646669", fontWeight: 400, fontSize: 12, marginLeft: 8 }}>Switching...</span>}
+                    </span>
+                    {isActive && (
+                      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width={18} height={18}>
+                        <path d="M5 13L9 17L19 7" stroke="#e2b714" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
                     )}
-                    {switchErrors[account.id] && (
-                      <div style={{ color: "#ca4754", fontSize: 11 }}>{switchErrors[account.id]}</div>
+                    {!isActive && (
+                      <button onClick={(e) => { e.stopPropagation(); onRemove(account.id); }}
+                        style={{ background: "none", border: "none", cursor: "pointer", color: "#646669", padding: 0, display: "flex" }}
+                        title="Remove account">
+                        <TrashIcon />
+                      </button>
                     )}
                   </div>
                 );
@@ -1900,8 +1917,19 @@ export default function Home() {
           linkedAccounts={linkedAccounts}
           onClose={() => setShowAccountsModal(false)}
           onSwitch={switchToAccount}
-          onAdd={(account) => saveLinkedAccounts([...linkedAccounts, account])}
-          onRemove={(id) => saveLinkedAccounts(linkedAccounts.filter((a) => a.id !== id))}
+          onAdd={(account, password) => {
+            saveLinkedAccounts([...linkedAccounts, account]);
+            // Save password keyed by user id for one-click switching
+            const saved = JSON.parse(localStorage.getItem("mp_account_passwords") ?? "{}");
+            saved[account.id] = password;
+            localStorage.setItem("mp_account_passwords", JSON.stringify(saved));
+          }}
+          onRemove={(id) => {
+            saveLinkedAccounts(linkedAccounts.filter((a) => a.id !== id));
+            const saved = JSON.parse(localStorage.getItem("mp_account_passwords") ?? "{}");
+            delete saved[id];
+            localStorage.setItem("mp_account_passwords", JSON.stringify(saved));
+          }}
         />
       )}
       {showDeleteAccount && currentUser && (
