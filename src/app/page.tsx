@@ -1931,6 +1931,7 @@ export default function Home() {
         likes: 0,
         liked_by: [],
         bookmarked_by: [],
+        reposted_by: [],
         comments: [],
         created_at: new Date().toISOString(),
         edited: false,
@@ -1963,6 +1964,7 @@ export default function Home() {
       likes: 0,
       liked_by: [],
       bookmarked_by: [],
+      reposted_by: [],
       comments: [],
       edited: false,
     });
