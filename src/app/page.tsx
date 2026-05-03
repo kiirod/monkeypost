@@ -118,8 +118,15 @@ const WHOLE_WORD_ONLY = new Set([
 
 async function containsBlockedWord(text: string): Promise<boolean> {
   const blocked = await getBlockedWords();
-  const normalized = normalizeText(text);
-  const plain = text.toLowerCase().replace(/[^a-z0-9\s]/g, "");
+
+  // Strip URLs and @mentions before checking — they shouldn't be filtered
+  const stripped = text
+    .replace(/https?:\/\/[^\s]+/g, "")
+    .replace(/(?<!\w)(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+(?:com|net|org|io|dev|app|co|gg|tv|me|uk|us|ca|au)[^\s]*/g, "")
+    .replace(/@[a-zA-Z0-9]{1,16}/g, "");
+
+  const normalized = normalizeText(stripped);
+  const plain = stripped.toLowerCase().replace(/[^a-z0-9\s]/g, "");
 
   for (const word of blocked) {
     const normWord = normalizeText(word);
