@@ -20,5 +20,9 @@
       "destination": "https://home.mtgoals.cc",
       "permanent": true
     }
+  ],
+  "rewrites": [
+    { "source": "/notif", "destination": "/" },
+    { "source": "/bookmarks", "destination": "/" }
   ]
 }
