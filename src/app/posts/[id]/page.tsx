@@ -18,15 +18,10 @@ function renderWithTwemoji(text: string): React.ReactNode[] {
   const tokenRegex = /(https?:\/\/[^\s]+|(?<!\w)(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+(?:com|net|org|io|dev|app|co|gg|tv|me|uk|us|ca|au)[^\s]*|(?<![a-zA-Z0-9])@[a-zA-Z0-9]{1,16}|(?<![a-zA-Z0-9])#[a-zA-Z0-9_]{1,32})/g;
   const emojiRegex = /(\p{Emoji_Presentation}|\p{Extended_Pictographic})/gu;
   const nodes: React.ReactNode[] = [];
-  let last = 0;
-  let keyIdx = 0;
-  let match;
-
+  let last = 0; let keyIdx = 0; let match;
   function renderEmojis(segment: string): React.ReactNode[] {
     const parts: React.ReactNode[] = [];
-    let eLast = 0;
-    emojiRegex.lastIndex = 0;
-    let em;
+    let eLast = 0; emojiRegex.lastIndex = 0; let em;
     while ((em = emojiRegex.exec(segment)) !== null) {
       if (em.index > eLast) parts.push(segment.slice(eLast, em.index));
       parts.push(<img key={keyIdx++} src={getTwemojiUrl(em[0])} alt={em[0]} style={{ width: "1.15em", height: "1.15em", display: "inline-block", verticalAlign: "-0.2em", margin: "0 0.05em" }} />);
@@ -35,7 +30,6 @@ function renderWithTwemoji(text: string): React.ReactNode[] {
     if (eLast < segment.length) parts.push(segment.slice(eLast));
     return parts;
   }
-
   tokenRegex.lastIndex = 0;
   while ((match = tokenRegex.exec(text)) !== null) {
     if (match.index > last) nodes.push(...renderEmojis(text.slice(last, match.index)));
@@ -62,6 +56,13 @@ const HeartIcon = ({ filled }: { filled?: boolean }) => (
   </svg>
 );
 
+const BookmarkIcon = ({ filled }: { filled?: boolean }) => (
+  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width={18} height={18}>
+    <path d="M5 3h14a1 1 0 011 1v18l-8-5.5L4 22V4a1 1 0 011-1z"
+      fill={filled ? "#ffffff" : "none"} stroke="#ffffff" strokeWidth="1.5" strokeLinejoin="round" />
+  </svg>
+);
+
 const RepostIcon = ({ active }: { active?: boolean }) => (
   <svg fill="none" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" width={18} height={18}>
     <path d="M6,14V9A6,6,0,0,1,16.89,5.54" style={{ stroke: active ? "#22c55e" : "#ffffff", strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2 }}/>
@@ -75,6 +76,13 @@ const ViewsIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width={16} height={16}>
     <path d="M15.0007 12C15.0007 13.6569 13.6576 15 12.0007 15C10.3439 15 9.00073 13.6569 9.00073 12C9.00073 10.3431 10.3439 9 12.0007 9C13.6576 9 15.0007 10.3431 15.0007 12Z" stroke="#646669" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
     <path d="M12.0012 5C7.52354 5 3.73326 7.94288 2.45898 12C3.73324 16.0571 7.52354 19 12.0012 19C16.4788 19 20.2691 16.0571 21.5434 12C20.2691 7.94291 16.4788 5 12.0012 5Z" stroke="#646669" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+);
+
+const CommentIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width={18} height={18}>
+    <path d="M7 9H17M7 13H12M21 20L17.6757 18.3378C17.4237 18.2118 17.2977 18.1488 17.1656 18.1044C17.0484 18.065 16.9277 18.0365 16.8052 18.0193C16.6672 18 16.5263 18 16.2446 18H6.2C5.07989 18 4.51984 18 4.09202 17.782C3.71569 17.5903 3.40973 17.2843 3.21799 16.908C3 16.4802 3 15.9201 3 14.8V7.2C3 6.07989 3 5.51984 3.21799 5.09202C3.40973 4.71569 3.71569 4.40973 4.09202 4.21799C4.51984 4 5.0799 4 6.2 4H17.8C18.9201 4 19.4802 4 19.908 4.21799C20.2843 4.40973 20.5903 4.71569 20.782 5.09202C21 5.51984 21 6.0799 21 7.2V20Z"
+      stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 );
 
@@ -116,31 +124,96 @@ interface Post {
   likes: number;
   liked_by: string[];
   reposted_by: string[];
+  bookmarked_by: string[];
   comments: Comment[];
   created_at: string;
   edited?: boolean;
   views?: number;
 }
 
-function ReplyThread({ comment, depth }: { comment: Comment; depth: number }) {
+// ── Recursive reply thread with inline reply input ────────────────────────────
+
+function ReplyThread({
+  comment,
+  depth,
+  postId,
+  currentUser,
+  onUpdate,
+}: {
+  comment: Comment;
+  depth: number;
+  postId: string;
+  currentUser: { id: string; username: string; pfp_url: string | null } | null;
+  onUpdate: (updated: Comment[]) => void;
+}) {
+  const [showReply, setShowReply] = useState(false);
+  const [replyText, setReplyText] = useState("");
   const avatarSize = depth === 0 ? 28 : depth === 1 ? 24 : 20;
   const fontSize = depth === 0 ? 13 : 12;
+
+  async function submitReply() {
+    if (!replyText.trim() || !currentUser) return;
+    const newReply: Comment = {
+      id: crypto.randomUUID(),
+      username: currentUser.username,
+      pfp_url: currentUser.pfp_url,
+      content: replyText.trim(),
+      created_at: new Date().toISOString(),
+      replies: [],
+    };
+
+    // We need to fetch the full post comments and insert the reply at the right place
+    const { data: postData } = await supabase.from("posts").select("comments").eq("id", postId).single();
+    if (!postData) return;
+
+    function insertInto(list: Comment[], targetId: string): Comment[] {
+      return list.map((c) => {
+        if (c.id === targetId) return { ...c, replies: [...(c.replies ?? []), newReply] };
+        return { ...c, replies: insertInto(c.replies ?? [], targetId) };
+      });
+    }
+
+    const updated = insertInto(postData.comments ?? [], comment.id);
+    await supabase.from("posts").update({ comments: updated }).eq("id", postId);
+    onUpdate(updated);
+    setReplyText("");
+    setShowReply(false);
+  }
+
   return (
     <div style={{ marginLeft: depth > 0 ? 20 : 0, marginBottom: depth === 0 ? 14 : 8 }}>
       <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-        <Avatar url={comment.pfp_url} username={comment.username} size={avatarSize} />
+        <a href={`/users/${comment.username.toLowerCase()}`} style={{ textDecoration: "none", flexShrink: 0 }}>
+          <Avatar url={comment.pfp_url} username={comment.username} size={avatarSize} />
+        </a>
         <div style={{ flex: 1 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 2 }}>
-            <span style={{ color: "#e2b714", fontSize: fontSize - 1, fontWeight: 700 }}>@{comment.username}</span>
+            <a href={`/users/${comment.username.toLowerCase()}`} style={{ color: "#e2b714", fontSize: fontSize - 1, fontWeight: 700, textDecoration: "none" }}>@{comment.username}</a>
             {VERIFIED_USERS.has(comment.username.toLowerCase()) && <OwnerBadge />}
           </div>
-          <div style={{ color: "#d1d0c5", fontSize, lineHeight: 1.4, wordBreak: "break-word" }}>
+          <div style={{ color: "#d1d0c5", fontSize, lineHeight: 1.4, wordBreak: "break-word", marginBottom: 4 }}>
             {renderWithTwemoji(comment.content)}
           </div>
+          {currentUser && depth < 4 && (
+            <button onClick={() => setShowReply((v) => !v)}
+              style={{ background: "none", border: "none", color: "#646669", fontSize: 11, cursor: "pointer", padding: 0, marginBottom: 4 }}>
+              reply
+            </button>
+          )}
+          {showReply && (
+            <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+              <input value={replyText} onChange={(e) => setReplyText(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && submitReply()}
+                placeholder="Reply..." maxLength={180}
+                style={{ flex: 1, background: "#3a3d42", border: "none", borderRadius: 6, padding: "6px 10px", color: "#fff", fontSize: 12, fontFamily: "inherit", outline: "none" }} />
+              <button onClick={submitReply}
+                style={{ background: "#e2b714", border: "none", borderRadius: 6, padding: "6px 10px", color: "#323437", fontWeight: 700, fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>↵</button>
+            </div>
+          )}
           {(comment.replies ?? []).length > 0 && (
-            <div style={{ marginTop: 8, paddingLeft: 4, borderLeft: "2px solid #3a3d42" }}>
+            <div style={{ marginTop: 4, paddingLeft: 4, borderLeft: "2px solid #3a3d42" }}>
               {(comment.replies ?? []).map((r) => (
-                <ReplyThread key={r.id} comment={r as Comment} depth={depth + 1} />
+                <ReplyThread key={r.id} comment={r} depth={depth + 1} postId={postId} currentUser={currentUser} onUpdate={onUpdate} />
               ))}
             </div>
           )}
@@ -149,6 +222,8 @@ function ReplyThread({ comment, depth }: { comment: Comment; depth: number }) {
     </div>
   );
 }
+
+// ── Main ──────────────────────────────────────────────────────────────────────
 
 export default function PostPage() {
   const params = useParams();
@@ -170,12 +245,8 @@ export default function PostPage() {
 
       const { data } = await supabase.from("posts").select("*").eq("id", postId).single();
       if (!data) { setNotFound(true); setLoading(false); return; }
-
       setPost(data as Post);
-
-      // Increment view count
       await supabase.from("posts").update({ views: (data.views ?? 0) + 1 }).eq("id", postId);
-
       setLoading(false);
     }
     load();
@@ -198,6 +269,14 @@ export default function PostPage() {
     await supabase.from("posts").update({ reposted_by: newRepostedBy }).eq("id", postId);
   }
 
+  async function handleBookmark() {
+    if (!currentUser || !post) return;
+    const bookmarked = (post.bookmarked_by ?? []).includes(currentUser.id);
+    const newBookmarkedBy = bookmarked ? post.bookmarked_by.filter((id) => id !== currentUser.id) : [...(post.bookmarked_by ?? []), currentUser.id];
+    setPost((p) => p ? { ...p, bookmarked_by: newBookmarkedBy } : p);
+    await supabase.from("posts").update({ bookmarked_by: newBookmarkedBy }).eq("id", postId);
+  }
+
   async function submitComment() {
     if (!commentText.trim() || !currentUser || !post) return;
     const newComment: Comment = {
@@ -212,6 +291,10 @@ export default function PostPage() {
     setPost((p) => p ? { ...p, comments: updated } : p);
     setCommentText("");
     await supabase.from("posts").update({ comments: updated }).eq("id", postId);
+  }
+
+  function handleCommentsUpdate(updated: Comment[]) {
+    setPost((p) => p ? { ...p, comments: updated } : p);
   }
 
   if (loading) return (
@@ -243,8 +326,9 @@ export default function PostPage() {
     </main>
   );
 
-  const liked = currentUser ? post!.liked_by?.includes(currentUser.id) : false;
+  const liked = currentUser ? (post!.liked_by ?? []).includes(currentUser.id) : false;
   const reposted = currentUser ? (post!.reposted_by ?? []).includes(currentUser.id) : false;
+  const bookmarked = currentUser ? (post!.bookmarked_by ?? []).includes(currentUser.id) : false;
 
   return (
     <main style={{ minHeight: "100vh", background: "#323437", fontFamily: "var(--font-roboto-mono), monospace", display: "flex", flexDirection: "column" }}>
@@ -280,6 +364,12 @@ export default function PostPage() {
                 <button onClick={handleRepost} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", cursor: "pointer", color: reposted ? "#22c55e" : "#646669", fontSize: 13, padding: 0 }}>
                   <RepostIcon active={reposted} /> {(post!.reposted_by ?? []).length}
                 </button>
+                <button onClick={handleBookmark} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", cursor: "pointer", color: bookmarked ? "#e2b714" : "#646669", padding: 0 }}>
+                  <BookmarkIcon filled={bookmarked} />
+                </button>
+                <div style={{ display: "flex", alignItems: "center", gap: 4, color: "#646669", fontSize: 13 }}>
+                  <CommentIcon /> {post!.comments.length}
+                </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 4, color: "#646669", fontSize: 13 }}>
                   <ViewsIcon /> {post!.views ?? 0}
                 </div>
@@ -294,10 +384,10 @@ export default function PostPage() {
             Replies ({post!.comments.length})
           </h3>
           {post!.comments.map((c) => (
-            <ReplyThread key={c.id} comment={c} depth={0} />
+            <ReplyThread key={c.id} comment={c} depth={0} postId={postId} currentUser={currentUser} onUpdate={handleCommentsUpdate} />
           ))}
           {currentUser && (
-            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+            <div style={{ display: "flex", gap: 8, marginTop: 16, paddingTop: 12, borderTop: "1px solid #3a3d42" }}>
               <input value={commentText} onChange={(e) => setCommentText(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && submitComment()}
                 placeholder="Write a reply..." maxLength={180}
