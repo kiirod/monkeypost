@@ -2364,7 +2364,7 @@ export default function Home() {
                 }
               },
               { label: "Developers", icon: <DevIcon />, action: () => window.location.href = "/dev" },
-              { label: "Support Developing", icon: <SupportIcon />, action: () => window.location.href = "/discord" },
+              { label: "GitHub", icon: <SupportIcon />, action: () => window.location.href = "/gh" },
               { label: "Bookmarks", icon: <BookmarkIcon filled />, action: () => { setView("bookmarks"); window.history.pushState(null, "", "/bookmarks"); } },
             ].map(({ label, icon, action }) => (
               <button key={label} onClick={action}
