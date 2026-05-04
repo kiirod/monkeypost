@@ -16,6 +16,11 @@
       "permanent": true
     },
     {
+      "source": "/gh",
+      "destination": "https://github.com/kiirod/monkeypost",
+      "permanent": true
+    },
+    {
       "source": "/dev",
       "destination": "https://home.mtgoals.cc",
       "permanent": true
