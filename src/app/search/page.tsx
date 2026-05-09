@@ -87,7 +87,7 @@ const ViewsIcon = () => (
   </svg>
 );
 
-const VERIFIED_USERS = new Set(["kiirod", "puppyboy", "asd", "ripvip", "testaccount123"]);
+const VERIFIED_USERS = new Set(["kiirod", "puppyboy", "asd", "ripvip", "testaccount123", "a", "nugt"]);
 
 const OwnerBadge = () => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#e2b714" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width={14} height={14} style={{ display: "inline-block", verticalAlign: "middle", marginLeft: 3 }}>
