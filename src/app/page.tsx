@@ -953,7 +953,7 @@ function PostCard({
                       {(c.replies ?? []).map((r, ri) => (
                         <ReplyItem key={r.id} reply={r} depth={1} currentUser={currentUser}
                           postId={post.id} commentId={c.id} replyPath={[ri]} onUpdate={handleCommentsUpdate}
-                          isAdmin={isAdmin} isShadowbannedUser={(u) => isShadowbanned} onAdminShadowban={onAdminShadowban} />
+                          isAdmin={isAdmin} isShadowbannedUser={(u) => isShadowbanned} onAdminShadowban={onAdminShadowban} verifiedUsers={verifiedUsers} />
                       ))}
                     </div>
                   </div>
