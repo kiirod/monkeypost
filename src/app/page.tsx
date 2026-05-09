@@ -1155,13 +1155,6 @@ function EditProfileModal({
       }
     }
 
-    // ── FIX 1: Update the Supabase auth email so login works with the new username ──
-    if (usernameChanged) {
-      await supabase.auth.updateUser({
-        email: `${newUsername.toLowerCase()}@monkeypost.local`,
-      });
-    }
-
     // ── FIX 2: Auto-update handle when username changes and handle was never customised ──
     // The handle is considered "default" if it matches the old username (lowercased)
     const handleWasDefault =
@@ -1170,7 +1163,8 @@ function EditProfileModal({
       ? newUsername.toLowerCase()
       : (newHandle.trim() || newUsername.toLowerCase());
 
-    // Update profile
+    // Update profile FIRST before touching auth (auth.updateUser can invalidate the
+    // session token, causing subsequent profile/post updates to fail RLS checks)
     const updateData: Record<string, string | null> = { pfp_url };
     if (usernameChanged) {
       updateData.username = newUsername;
@@ -1179,6 +1173,13 @@ function EditProfileModal({
     updateData.handle = finalHandle;
 
     await supabase.from("profiles").update(updateData).eq("id", currentUser.id);
+
+    // ── FIX 1: Update auth email LAST so the session stays valid for all DB writes above ──
+    if (usernameChanged) {
+      await supabase.auth.updateUser({
+        email: `${newUsername.toLowerCase()}@monkeypost.local`,
+      });
+    }
 
     // Update all posts by this user
     // ── Bulk-update all this user's posts in ONE query (username, handle, pfp) ──
