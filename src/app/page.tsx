@@ -8,6 +8,8 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
+const ADMIN_USER = "kiirod";
+
 // ── Twemoji ───────────────────────────────────────────────────────────────────
 
 function getTwemojiUrl(emoji: string): string {
@@ -295,7 +297,6 @@ const ViewsIcon = () => (
   </svg>
 );
 
-const ADMIN_USER = "kiirod";
 
 const BanIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width={16} height={16}>
@@ -304,7 +305,6 @@ const BanIcon = () => (
   </svg>
 );
 
-const VERIFIED_USERS = new Set(["kiirod", "puppyboy", "asd", "ripvip", "testaccount123", "a", "nugt"]);
 
 const OwnerBadge = () => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#e2b714" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width={16} height={16} style={{ display: "inline-block", verticalAlign: "middle", marginLeft: 4 }}>
@@ -358,6 +358,7 @@ interface Post {
   created_at: string;
   edited?: boolean;
   views?: number;
+  verified?: boolean;
 }
 
 interface Profile {
@@ -453,6 +454,7 @@ function ReplyItem({
   isAdmin,
   isShadowbannedUser,
   onAdminShadowban,
+  verifiedUsers,
 }: {
   reply: Reply;
   depth: number;
@@ -464,6 +466,7 @@ function ReplyItem({
   isAdmin: boolean;
   isShadowbannedUser: (username: string) => boolean;
   onAdminShadowban: (username: string) => void;
+  verifiedUsers: Set<string>;
 }) {
   const [showReplyInput, setShowReplyInput] = useState(false);
   const [replyText, setReplyText] = useState("");
@@ -559,7 +562,7 @@ function ReplyItem({
         <div style={{ flex: 1 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 2 }}>
             <span style={{ color: "#e2b714", fontSize: fontSize - 1, fontWeight: 700 }}>@{reply.username}</span>
-            {VERIFIED_USERS.has(reply.username.toLowerCase()) && <OwnerBadge />}
+            {verifiedUsers.has(reply.username.toLowerCase()) && <OwnerBadge />}
             {replyIsShadowbanned && isAdmin && (
               <span style={{ color: "#ca4754", fontSize: 10, background: "#ca475422", borderRadius: 4, padding: "1px 6px" }}>shadowbanned</span>
             )}
@@ -617,7 +620,7 @@ function ReplyItem({
           {(reply.replies ?? []).map((r, i) => (
             <ReplyItem key={r.id} reply={r} depth={depth + 1} currentUser={currentUser}
               postId={postId} commentId={commentId} replyPath={[...replyPath, i]} onUpdate={onUpdate}
-              isAdmin={isAdmin} isShadowbannedUser={isShadowbannedUser} onAdminShadowban={onAdminShadowban} />
+              isAdmin={isAdmin} isShadowbannedUser={isShadowbannedUser} onAdminShadowban={onAdminShadowban} verifiedUsers={verifiedUsers} />
           ))}
         </div>
       </div>
@@ -640,6 +643,7 @@ function PostCard({
   onAdminShadowban,
   onRepost,
   blockedUsers,
+  verifiedUsers,
 }: {
   post: Post;
   currentUser: { id: string; username: string; pfp_url: string | null } | null;
@@ -653,6 +657,7 @@ function PostCard({
   onAdminShadowban: (username: string) => void;
   onRepost: (id: string) => void;
   blockedUsers: Set<string>;
+  verifiedUsers: Set<string>;
 }) {
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState("");
@@ -770,7 +775,7 @@ function PostCard({
         <div style={{ flex: 1, minWidth: 0, cursor: "pointer" }} onClick={(e) => { if ((e.target as HTMLElement).closest("a,button,input,textarea")) return; window.location.href = `/posts/${post.id}`; }}>
           <div style={{ marginBottom: 4, display: "flex", alignItems: "center", gap: 4 }}>
             <span style={{ color: "#e2b714", fontWeight: 700, fontSize: 14 }}>@{post.username}</span>
-            {VERIFIED_USERS.has(post.username.toLowerCase()) && <OwnerBadge />}
+            {post.verified && <OwnerBadge />}
             {post.handle && post.handle !== post.username.toLowerCase() && (
               <span style={{ color: "#646669", fontSize: 12 }}>@{post.handle}</span>
             )}
@@ -792,7 +797,7 @@ function PostCard({
               </div>
             )}
           </div>
-          {VERIFIED_USERS.has(post.username.toLowerCase()) && (
+          {post.verified && (
             <div style={{ color: "#e2b714", opacity: 0.5, fontSize: 11, marginTop: -2, marginBottom: 4 }}>Staff</div>
           )}
 
@@ -917,7 +922,7 @@ function PostCard({
                     <div style={{ flex: 1 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 2 }}>
                         <span style={{ color: "#e2b714", fontSize: 12, fontWeight: 700 }}>@{c.username}</span>
-                        {VERIFIED_USERS.has(c.username.toLowerCase()) && <OwnerBadge />}
+                        {verifiedUsers.has(c.username.toLowerCase()) && <OwnerBadge />}
                         {isAdmin && c.username.toLowerCase() !== ADMIN_USER && (
                           <div style={{ display: "flex", gap: 4, marginLeft: 4 }}>
                             <button onClick={async () => {
@@ -1182,9 +1187,17 @@ function EditProfileModal({
     }
 
     // Update all posts by this user
-    // ── Bulk-update all this user's posts in ONE query (username, handle, pfp) ──
+    // ── Bulk-update all this user's posts in ONE query (username, handle, pfp, verified) ──
     if (usernameChanged || pfpFile) {
-      const bulkPostUpdate: Record<string, unknown> = { handle: finalHandle };
+      const { data: verifiedCheck } = await supabase
+        .from("profiles")
+        .select("verified")
+        .eq("id", currentUser.id)
+        .single();
+      const bulkPostUpdate: Record<string, unknown> = {
+        handle: finalHandle,
+        verified: verifiedCheck?.verified ?? false,
+      };
       if (pfpFile) bulkPostUpdate.pfp_url = pfp_url;
       if (usernameChanged) bulkPostUpdate.username = newUsername;
       await supabase.from("posts").update(bulkPostUpdate).eq("user_id", currentUser.id);
@@ -1664,10 +1677,16 @@ export default function Home() {
   }
 
   const [shadowbannedUsers, setShadowbannedUsers] = useState<Set<string>>(new Set());
+  const [verifiedUsers, setVerifiedUsers] = useState<Set<string>>(new Set());
 
   async function loadShadowbannedUsers() {
     const { data } = await supabase.from("profiles").select("username").eq("shadowbanned", true);
     if (data) setShadowbannedUsers(new Set(data.map((p: { username: string }) => p.username.toLowerCase())));
+  }
+
+  async function loadVerifiedUsers() {
+    const { data } = await supabase.from("profiles").select("username").eq("verified", true);
+    if (data) setVerifiedUsers(new Set(data.map((p: { username: string }) => p.username.toLowerCase())));
   }
 
   // Notifications
@@ -1747,6 +1766,7 @@ export default function Home() {
           await loadPostsInner();
           await loadNotifications(session.user.id);
           await loadShadowbannedUsers();
+    await loadVerifiedUsers();
           await loadBlockedUsers(session.user.id);
           setStep("app");
           return;
@@ -1862,6 +1882,7 @@ export default function Home() {
     await loadPosts();
     await loadNotifications(authData.user.id);
     await loadShadowbannedUsers();
+    await loadVerifiedUsers();
     await loadBlockedUsers(authData.user.id);
     setStep("app");
   }
@@ -1968,6 +1989,7 @@ export default function Home() {
       comments: [],
       edited: false,
       views: 0,
+      verified: verifiedUsers.has(currentUser.username.toLowerCase()),
     });
 
     // Fire mention notifications
@@ -2554,6 +2576,7 @@ export default function Home() {
                     onLike={handleLike} onBookmark={handleBookmark} onDelete={handleDelete} onEdit={handleEdit}
                     onRepost={handleRepost}
                     blockedUsers={blockedUsers}
+                    verifiedUsers={verifiedUsers}
                     isAdmin={currentUser?.username.toLowerCase() === ADMIN_USER}
                     isShadowbanned={shadowbannedUsers.has(post.username.toLowerCase())}
                     onAdminDelete={handleAdminDelete}
