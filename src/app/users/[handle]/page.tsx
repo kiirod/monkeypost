@@ -95,8 +95,6 @@ function Avatar({ url, username, size = 36 }: { url: string | null; username: st
   );
 }
 
-const VERIFIED_USERS = new Set(["kiirod", "puppyboy", "asd", "ripvip", "testaccount123", "a", "nugt"]);
-
 const OwnerBadge = () => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#e2b714" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width={16} height={16} style={{ display: "inline-block", verticalAlign: "middle", marginLeft: 4 }}>
     <path d="M12 3a3.6 3.6 0 00-3.05 1.68 3.6 3.6 0 00-.9-.1 3.6 3.6 0 00-2.42 1.06 3.6 3.6 0 00-.94 3.32A3.6 3.6 0 003 12a3.6 3.6 0 001.69 3.05 3.6 3.6 0 00.95 3.32 3.6 3.6 0 003.35.96A3.6 3.6 0 0012 21a3.6 3.6 0 003.04-1.67 3.6 3.6 0 004.3-4.3A3.6 3.6 0 0021 12a3.6 3.6 0 00-1.67-3.04v0a3.6 3.6 0 00-4.3-4.3A3.6 3.6 0 0012 3z" />
@@ -120,6 +118,7 @@ interface Post {
   created_at: string;
   edited?: boolean;
   views?: number;
+  verified?: boolean;
 }
 
 interface Profile {
@@ -127,6 +126,7 @@ interface Profile {
   username: string;
   handle: string;
   pfp_url: string | null;
+  verified?: boolean;
 }
 
 export default function UserProfile() {
@@ -145,14 +145,12 @@ export default function UserProfile() {
 
   useEffect(() => {
     async function load() {
-      // Get current user session
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
         const { data: me } = await supabase.from("profiles").select("id, username").eq("id", session.user.id).single();
         if (me) setCurrentUser({ id: me.id, username: me.username });
       }
 
-      // Load profile by handle
       const { data: profileData } = await supabase
         .from("profiles")
         .select("*")
@@ -167,7 +165,6 @@ export default function UserProfile() {
 
       setProfile(profileData as Profile);
 
-      // Load their posts
       const { data: postsData } = await supabase
         .from("posts")
         .select("*")
@@ -176,7 +173,6 @@ export default function UserProfile() {
 
       setPosts((postsData as Post[]) ?? []);
 
-      // Load follow/block status
       if (session?.user) {
         const { data: followData } = await supabase
           .from("follows")
@@ -195,7 +191,6 @@ export default function UserProfile() {
         setIsBlocked(!!blockData);
       }
 
-      // Load follower/following counts
       const { count: fc } = await supabase.from("follows").select("*", { count: "exact", head: true }).eq("following_id", profileData.id);
       const { count: fgc } = await supabase.from("follows").select("*", { count: "exact", head: true }).eq("follower_id", profileData.id);
       setFollowerCount(fc ?? 0);
@@ -269,7 +264,6 @@ export default function UserProfile() {
 
   return (
     <main style={{ minHeight: "100vh", background: "#323437", fontFamily: "var(--font-roboto-mono), monospace", display: "flex", flexDirection: "column" }}>
-      {/* Topbar */}
       <div style={{ width: "100%", padding: "16px 32px", borderBottom: "1px solid #3a3d42", display: "flex", alignItems: "center", gap: 16, position: "sticky", top: 0, background: "#323437", zIndex: 10 }}>
         <a href="/" style={{ fontSize: 22, fontWeight: 700, color: "#e2b714", textDecoration: "none", letterSpacing: "-0.5px" }}>monkeypost</a>
         <a href="/search" style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8, background: "#2c2e31", border: "1px solid #3a3d42", borderRadius: 8, padding: "7px 14px", color: "#646669", fontSize: 13, fontFamily: "inherit", textDecoration: "none" }}>
@@ -289,7 +283,7 @@ export default function UserProfile() {
             <div style={{ flex: 1 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
                 <span style={{ color: "#e2b714", fontWeight: 700, fontSize: 20 }}>{profile!.username}</span>
-                {VERIFIED_USERS.has(profile!.username.toLowerCase()) && <OwnerBadge />}
+                {profile!.verified && <OwnerBadge />}
               </div>
               <div style={{ color: "#646669", fontSize: 14, marginBottom: 12 }}>@{profile!.handle || profile!.username.toLowerCase()}</div>
               <div style={{ display: "flex", gap: 20, marginBottom: 16 }}>
@@ -341,7 +335,7 @@ export default function UserProfile() {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 4 }}>
                   <span style={{ color: "#e2b714", fontWeight: 700, fontSize: 14 }}>{post.username}</span>
-                  {VERIFIED_USERS.has(post.username.toLowerCase()) && <OwnerBadge />}
+                  {post.verified && <OwnerBadge />}
                   <span style={{ color: "#646669", fontSize: 12 }}>@{post.handle || post.username.toLowerCase()}</span>
                 </div>
                 <div style={{ fontSize: 15, lineHeight: 1.5, wordBreak: "break-word", color: "#d1d0c5" }}>
