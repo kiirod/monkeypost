@@ -798,7 +798,7 @@ function PostCard({
             )}
           </div>
           {post.verified && (
-            <div style={{ color: "#e2b714", opacity: 0.5, fontSize: 11, marginTop: -2, marginBottom: 4 }}>Staff</div>
+            <div style={{ color: "#e2b714", opacity: 0.5, fontSize: 11, marginTop: -2, marginBottom: 4 }}>Collaborator</div>
           )}
 
           {editing ? (
