@@ -17,27 +17,18 @@ function renderWithTwemoji(text: string): React.ReactNode[] {
   const tokenRegex = /(https?:\/\/[^\s]+|(?<!\w)(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+(?:com|net|org|io|dev|app|co|gg|tv|me|uk|us|ca|au)[^\s]*|(?<![a-zA-Z0-9])@[a-zA-Z0-9]{1,16}|(?<![a-zA-Z0-9])#[a-zA-Z0-9_]{1,32})/g;
   const emojiRegex = /(\p{Emoji_Presentation}|\p{Extended_Pictographic})/gu;
   const nodes: React.ReactNode[] = [];
-  let last = 0;
-  let keyIdx = 0;
-  let match;
-
+  let last = 0; let keyIdx = 0; let match;
   function renderEmojis(segment: string): React.ReactNode[] {
     const parts: React.ReactNode[] = [];
-    let eLast = 0;
-    emojiRegex.lastIndex = 0;
-    let em;
+    let eLast = 0; emojiRegex.lastIndex = 0; let em;
     while ((em = emojiRegex.exec(segment)) !== null) {
       if (em.index > eLast) parts.push(segment.slice(eLast, em.index));
-      parts.push(
-        <img key={keyIdx++} src={getTwemojiUrl(em[0])} alt={em[0]}
-          style={{ width: "1.15em", height: "1.15em", display: "inline-block", verticalAlign: "-0.2em", margin: "0 0.05em" }} />
-      );
+      parts.push(<img key={keyIdx++} src={getTwemojiUrl(em[0])} alt={em[0]} style={{ width: "1.15em", height: "1.15em", display: "inline-block", verticalAlign: "-0.2em", margin: "0 0.05em" }} />);
       eLast = em.index + em[0].length;
     }
     if (eLast < segment.length) parts.push(segment.slice(eLast));
     return parts;
   }
-
   tokenRegex.lastIndex = 0;
   while ((match = tokenRegex.exec(text)) !== null) {
     if (match.index > last) nodes.push(...renderEmojis(text.slice(last, match.index)));
@@ -87,8 +78,6 @@ const ViewsIcon = () => (
   </svg>
 );
 
-const VERIFIED_USERS = new Set(["kiirod", "puppyboy", "asd", "ripvip", "testaccount123", "a", "nugt"]);
-
 const OwnerBadge = () => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#e2b714" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width={14} height={14} style={{ display: "inline-block", verticalAlign: "middle", marginLeft: 3 }}>
     <path d="M12 3a3.6 3.6 0 00-3.05 1.68 3.6 3.6 0 00-.9-.1 3.6 3.6 0 00-2.42 1.06 3.6 3.6 0 00-.94 3.32A3.6 3.6 0 003 12a3.6 3.6 0 001.69 3.05 3.6 3.6 0 00.95 3.32 3.6 3.6 0 003.35.96A3.6 3.6 0 0012 21a3.6 3.6 0 003.04-1.67 3.6 3.6 0 004.3-4.3A3.6 3.6 0 0021 12a3.6 3.6 0 00-1.67-3.04v0a3.6 3.6 0 00-4.3-4.3A3.6 3.6 0 0012 3z" />
@@ -120,6 +109,7 @@ interface Post {
   created_at: string;
   edited?: boolean;
   views?: number;
+  verified?: boolean;
 }
 
 export default function SearchPage() {
@@ -131,14 +121,6 @@ export default function SearchPage() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const hash = window.location.hash;
-    if (hash.startsWith("#")) {
-      const tag = decodeURIComponent(hash.slice(1));
-      setQuery(`#${tag}`);
-      setActiveTag(tag.toLowerCase());
-      searchTag(tag.toLowerCase());
-    }
-    // Also check pathname for /search/%23tag
     const path = window.location.pathname;
     const match = path.match(/\/search\/%23(.+)/);
     if (match) {
@@ -248,7 +230,7 @@ export default function SearchPage() {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 2 }}>
                   <a href={`/users/${post.handle ?? post.username.toLowerCase()}`} onClick={(e) => e.stopPropagation()} style={{ color: "#e2b714", fontWeight: 700, fontSize: 14, textDecoration: "none" }}>{post.username}</a>
-                  {VERIFIED_USERS.has(post.username.toLowerCase()) && <OwnerBadge />}
+                  {post.verified && <OwnerBadge />}
                   <span style={{ color: "#646669", fontSize: 12 }}>@{post.handle ?? post.username.toLowerCase()}</span>
                 </div>
                 <div style={{ fontSize: 15, lineHeight: 1.5, wordBreak: "break-word", color: "#d1d0c5", marginBottom: 10 }}>
