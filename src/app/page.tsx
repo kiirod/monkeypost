@@ -125,7 +125,6 @@ function collapseRepeats(text: string): string {
 }
 
 function removeSpacingBypass(text: string): string {
-  // "s e x" or "s.e.x" or "s-e-x" → "sex"
   return text.replace(/(\b\w)\s*[\s.\-_*]+\s*(?=\w\b)/g, "$1");
 }
 
@@ -703,7 +702,6 @@ function PostCard({
     setCommentText("");
     await supabase.from("posts").update({ comments: updatedComments }).eq("id", post.id);
 
-    // Notify post owner if it's not themselves
     if (post.user_id !== currentUser.id) {
       await supabase.from("notifications").insert({
         user_id: post.user_id,
@@ -717,7 +715,6 @@ function PostCard({
       });
     }
 
-    // Notify mentioned users
     const mentionRegex = /@([a-zA-Z0-9]{1,16})/g;
     const mentioned = new Set<string>();
     let mm;
@@ -1061,7 +1058,7 @@ function EditProfileModal({
 }: {
   currentUser: { id: string; username: string; pfp_url: string | null };
   onClose: () => void;
-  onSave: (newUsername: string, newPfpUrl: string | null) => void;
+  onSave: (newUsername: string, newPfpUrl: string | null, newHandle: string) => void;
 }) {
   const [newUsername, setNewUsername] = useState(currentUser.username);
   const [newHandle, setNewHandle] = useState("");
@@ -1072,6 +1069,9 @@ function EditProfileModal({
   const [usernameLastChanged, setUsernameLastChanged] = useState<string | null>(null);
   const pfpRef = useRef<HTMLInputElement>(null);
 
+  // Store the original handle so we know if it was a "default" (matched old username)
+  const [originalHandle, setOriginalHandle] = useState("");
+
   useEffect(() => {
     async function fetchProfile() {
       const { data } = await supabase
@@ -1080,7 +1080,10 @@ function EditProfileModal({
         .eq("id", currentUser.id)
         .single();
       if (data?.username_last_changed) setUsernameLastChanged(data.username_last_changed);
-      if (data?.handle) setNewHandle(data.handle);
+      if (data?.handle) {
+        setNewHandle(data.handle);
+        setOriginalHandle(data.handle);
+      }
     }
     fetchProfile();
   }, [currentUser.id]);
@@ -1152,68 +1155,66 @@ function EditProfileModal({
       }
     }
 
+    // ── FIX 1: Update the Supabase auth email so login works with the new username ──
+    if (usernameChanged) {
+      await supabase.auth.updateUser({
+        email: `${newUsername.toLowerCase()}@monkeypost.local`,
+      });
+    }
+
+    // ── FIX 2: Auto-update handle when username changes and handle was never customised ──
+    // The handle is considered "default" if it matches the old username (lowercased)
+    const handleWasDefault =
+      originalHandle === currentUser.username.toLowerCase() || !originalHandle;
+    const finalHandle = usernameChanged && handleWasDefault
+      ? newUsername.toLowerCase()
+      : (newHandle.trim() || newUsername.toLowerCase());
+
     // Update profile
     const updateData: Record<string, string | null> = { pfp_url };
     if (usernameChanged) {
       updateData.username = newUsername;
       updateData.username_last_changed = new Date().toISOString();
     }
-    // Save handle — default to lowercase username if empty
-    updateData.handle = newHandle.trim() || newUsername.toLowerCase();
+    updateData.handle = finalHandle;
+
     await supabase.from("profiles").update(updateData).eq("id", currentUser.id);
 
     // Update all posts by this user
+    // ── Bulk-update all this user's posts in ONE query (username, handle, pfp) ──
     if (usernameChanged || pfpFile) {
-      const { data: userPosts } = await supabase
+      const bulkPostUpdate: Record<string, unknown> = { handle: finalHandle };
+      if (pfpFile) bulkPostUpdate.pfp_url = pfp_url;
+      if (usernameChanged) bulkPostUpdate.username = newUsername;
+      await supabase.from("posts").update(bulkPostUpdate).eq("user_id", currentUser.id);
+    }
+
+    // ── Update this user's username/pfp inside comments on OTHER people's posts ──
+    // (comments are stored as JSONB so we must fetch-and-rewrite each affected post)
+    if (usernameChanged || pfpFile) {
+      const { data: allPosts } = await supabase
         .from("posts")
         .select("id, comments")
-        .eq("user_id", currentUser.id);
+        .neq("user_id", currentUser.id);
 
-      if (userPosts) {
-        for (const post of userPosts) {
-          const updatedPost: Record<string, unknown> = {};
-          if (pfpFile) updatedPost.pfp_url = pfp_url;
-          if (usernameChanged) updatedPost.username = newUsername;
-
-          // Update comments/replies that belong to this user
+      if (allPosts) {
+        for (const post of allPosts) {
           const updatedComments = updateUsernameInComments(
             post.comments ?? [],
             currentUser.username,
             usernameChanged ? newUsername : currentUser.username,
             pfpFile ? pfp_url : currentUser.pfp_url
           );
-          updatedPost.comments = updatedComments;
-
-          await supabase.from("posts").update(updatedPost).eq("id", post.id);
-        }
-      }
-
-      // Also update comments on other people's posts
-      if (usernameChanged || pfpFile) {
-        const { data: allPosts } = await supabase
-          .from("posts")
-          .select("id, comments")
-          .neq("user_id", currentUser.id);
-
-        if (allPosts) {
-          for (const post of allPosts) {
-            const updatedComments = updateUsernameInComments(
-              post.comments ?? [],
-              currentUser.username,
-              usernameChanged ? newUsername : currentUser.username,
-              pfpFile ? pfp_url : currentUser.pfp_url
-            );
-            const hasChanges = JSON.stringify(updatedComments) !== JSON.stringify(post.comments);
-            if (hasChanges) {
-              await supabase.from("posts").update({ comments: updatedComments }).eq("id", post.id);
-            }
+          const hasChanges = JSON.stringify(updatedComments) !== JSON.stringify(post.comments);
+          if (hasChanges) {
+            await supabase.from("posts").update({ comments: updatedComments }).eq("id", post.id);
           }
         }
       }
     }
 
     setSaving(false);
-    onSave(usernameChanged ? newUsername : currentUser.username, pfp_url);
+    onSave(usernameChanged ? newUsername : currentUser.username, pfp_url, finalHandle);
   }
 
   return (
@@ -1358,10 +1359,8 @@ function DeleteAccountModal({
   async function handleDelete() {
     setDeleting(true);
 
-    // Delete all posts by this user
     await supabase.from("posts").delete().eq("user_id", currentUser.id);
 
-    // Remove this user's comments and replies from all other posts
     const { data: allPosts } = await supabase.from("posts").select("id, comments");
     if (allPosts) {
       for (const post of allPosts) {
@@ -1373,13 +1372,9 @@ function DeleteAccountModal({
       }
     }
 
-    // Delete notifications for this user
     await supabase.from("notifications").delete().eq("user_id", currentUser.id);
-
-    // Delete profile row — this frees the username
     await supabase.from("profiles").delete().eq("id", currentUser.id);
 
-    // Delete the auth account via the API route (which uses service role key)
     const { data: { session } } = await supabase.auth.getSession();
     await fetch("/api/delete-account", {
       method: "POST",
@@ -1390,7 +1385,6 @@ function DeleteAccountModal({
       body: JSON.stringify({ userId: currentUser.id }),
     });
 
-    // Sign out locally
     await supabase.auth.signOut();
 
     setDeleting(false);
@@ -1481,17 +1475,14 @@ function AccountsModal({
     setAdding(true);
     setAddError("");
 
-    // Get the current session token BEFORE signing in to the new account
     const { data: { session: currentSession } } = await supabase.auth.getSession();
 
-    // Verify the new account credentials
     const { data, error } = await supabase.auth.signInWithPassword({
       email: `${addUsername.toLowerCase()}@monkeypost.local`,
       password: addPassword,
     });
 
     if (error || !data.user) {
-      // Restore the original session
       if (currentSession?.refresh_token) {
         await supabase.auth.refreshSession({ refresh_token: currentSession.refresh_token });
       }
@@ -1502,7 +1493,6 @@ function AccountsModal({
 
     const { data: profile } = await supabase.from("profiles").select("*").eq("id", data.user.id).single();
 
-    // Restore back to the original account immediately
     if (currentSession?.refresh_token) {
       await supabase.auth.refreshSession({ refresh_token: currentSession.refresh_token });
     }
@@ -1510,7 +1500,6 @@ function AccountsModal({
     if (!profile) { setAddError("Account not found."); setAdding(false); return; }
 
     const newAccount = { id: data.user.id, username: profile.username, pfp_url: profile.pfp_url };
-    // Pass password so we can switch to it later without re-entering
     onAdd(newAccount, addPassword);
     setAddUsername("");
     setAddPassword("");
@@ -1522,7 +1511,6 @@ function AccountsModal({
     if (account.id === currentUser.id) return;
     setSwitchingId(account.id);
     setSwitchError("");
-    // Password was saved when the account was added
     const saved = JSON.parse(localStorage.getItem("mp_account_passwords") ?? "{}");
     const pw = saved[account.id];
     if (!pw) {
@@ -1672,7 +1660,9 @@ export default function Home() {
   async function loadBlockedUsers(userId: string) {
     const { data } = await supabase.from("blocks").select("blocked_id").eq("blocker_id", userId);
     if (data) setBlockedUsers(new Set(data.map((b: { blocked_id: string }) => b.blocked_id)));
-  }  const [shadowbannedUsers, setShadowbannedUsers] = useState<Set<string>>(new Set());
+  }
+
+  const [shadowbannedUsers, setShadowbannedUsers] = useState<Set<string>>(new Set());
 
   async function loadShadowbannedUsers() {
     const { data } = await supabase.from("profiles").select("username").eq("shadowbanned", true);
@@ -1850,7 +1840,7 @@ export default function Home() {
       }
     }
 
-    await supabase.from("profiles").upsert({ id: uid, username, pfp_url });
+    await supabase.from("profiles").upsert({ id: uid, username, handle: username.toLowerCase(), pfp_url });
     setCurrentUser({ id: uid, username, pfp_url });
     await loadPosts();
     setStep("app");
@@ -1955,9 +1945,18 @@ export default function Home() {
       }
     }
 
+    // Fetch the current handle from profiles so we always store the up-to-date handle on the post
+    const { data: myProfile } = await supabase
+      .from("profiles")
+      .select("handle")
+      .eq("id", currentUser.id)
+      .single();
+    const currentHandle = myProfile?.handle ?? currentUser.username.toLowerCase();
+
     await supabase.from("posts").insert({
       user_id: currentUser.id,
       username: currentUser.username,
+      handle: currentHandle,
       pfp_url: currentUser.pfp_url,
       content: postText.trim(),
       image_url,
@@ -1967,6 +1966,7 @@ export default function Home() {
       reposted_by: [],
       comments: [],
       edited: false,
+      views: 0,
     });
 
     // Fire mention notifications
@@ -1990,7 +1990,6 @@ export default function Home() {
     }
     if (mentioned.size === 0) return;
 
-    // Look up user IDs for mentioned usernames
     const { data: profiles } = await supabase
       .from("profiles")
       .select("id, username")
@@ -2094,12 +2093,11 @@ export default function Home() {
     setShadowbannedUsers((prev) => new Set([...prev, username.toLowerCase()]));
   }
 
-  function handleEditProfileSave(newUsername: string, newPfpUrl: string | null) {
+  function handleEditProfileSave(newUsername: string, newPfpUrl: string | null, newHandle: string) {
     setCurrentUser((prev) => prev ? { ...prev, username: newUsername, pfp_url: newPfpUrl } : prev);
-    // Also update all posts in local state
     setPosts((prev) => prev.map((p) => {
       if (p.user_id === currentUser?.id) {
-        return { ...p, username: newUsername, pfp_url: newPfpUrl };
+        return { ...p, username: newUsername, pfp_url: newPfpUrl, handle: newHandle };
       }
       return p;
     }));
@@ -2118,7 +2116,6 @@ export default function Home() {
     const hoursOld = (Date.now() - new Date(post.created_at).getTime()) / (1000 * 60 * 60);
     const likes = post.likes ?? 0;
     const comments = (post.comments ?? []).length;
-    // Replies worth more than likes since they're rarer and show deeper engagement
     return (likes * 1 + comments * 5) / Math.pow(hoursOld + 2, 1.5);
   }
 
@@ -2135,7 +2132,6 @@ export default function Home() {
 
       // Remove deleted posts
       let merged = sortedPostsRef.current.filter((p) => currentIds.has(p.id));
-
       // Update existing posts in place (likes, comments etc) without moving them
       merged = merged.map((p) => postList.find((np) => np.id === p.id) ?? p);
 
@@ -2289,7 +2285,6 @@ export default function Home() {
           onSwitch={switchToAccount}
           onAdd={(account, password) => {
             saveLinkedAccounts([...linkedAccounts, account]);
-            // Save password keyed by user id for one-click switching
             const saved = JSON.parse(localStorage.getItem("mp_account_passwords") ?? "{}");
             saved[account.id] = password;
             localStorage.setItem("mp_account_passwords", JSON.stringify(saved));
@@ -2480,7 +2475,6 @@ export default function Home() {
             </div>
           )}
 
-          {/* Refresh button — always visible in posts view */}
           {view === "posts" && (
             <div style={{ marginBottom: 16 }}>
               <button
