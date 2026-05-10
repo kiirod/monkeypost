@@ -1908,9 +1908,9 @@ export default function Home() {
   // Infinite scroll: observe the 3rd-from-last rendered post; when it enters view load more
   useEffect(() => {
     if (view !== "posts" && view !== "bookmarks") return;
-    // If all posts are already visible, nothing to load
-    if (visibleCount >= allVisiblePosts.length) return;
-    const renderedCount = Math.min(visibleCount, allVisiblePosts.length);
+    // If all posts are already visible, nothing to load — use raw posts.length as upper bound
+    if (visibleCount >= posts.length) return;
+    const renderedCount = Math.min(visibleCount, posts.length);
     const targetIndex = Math.max(0, renderedCount - 3);
     const target = postRefs.current[targetIndex];
     if (!target) return;
@@ -1925,7 +1925,7 @@ export default function Home() {
     );
     observer.observe(target);
     return () => observer.disconnect();
-  }, [visibleCount, view, posts.length, allVisiblePosts.length]);
+  }, [visibleCount, view, posts.length]);
 
   function handlePfpPick(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
