@@ -357,6 +357,18 @@ export default function UserProfile() {
                     }}>
                     {isBlocked ? "Unblock" : "Block"}
                   </button>
+                  {!isBlocked && (
+                    <a href={`https://chat.mtgoals.cc/${profile!.handle || profile!.username.toLowerCase()}`}
+                      target="_blank" rel="noopener noreferrer"
+                      style={{
+                        background: "#3a3d42", border: "none", borderRadius: 8,
+                        padding: "8px 18px", color: "#d1d0c5",
+                        fontWeight: 700, fontSize: 13, fontFamily: "inherit", cursor: "pointer",
+                        textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6,
+                      }}>
+                      💬 Message
+                    </a>
+                  )}
                 </div>
               )}
               {isOwnProfile && (
