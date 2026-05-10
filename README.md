@@ -21,5 +21,6 @@ More information; [Privacy Policy page](https://www.mtgoals.cc/pages/policy)
 # Discord server
 You can join our Discord server, 'Monkeytype Projects' by clicking [here](https://pj.mtgoals.cc/home/app/dsc)
 
-# License
+# Other
 Our project uses the MIT License, to view the license, you can click [this](https://pj.mtgoals.cc/home/app/post/lic)
+View Code of Conduct by clicking [this](https://pj.mtgoals.cc/home/app/post/coc)
