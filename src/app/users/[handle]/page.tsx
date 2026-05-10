@@ -127,6 +127,7 @@ interface Profile {
   handle: string;
   pfp_url: string | null;
   banner_url?: string | null;
+  banner_position?: number | null;
   bio?: string | null;
   verified?: boolean;
   created_at?: string;
@@ -296,11 +297,19 @@ export default function UserProfile() {
         {/* Profile header */}
         <div style={{ background: "#2c2e31", borderRadius: 14, border: "1px solid #3a3d42", marginBottom: 24, overflow: "hidden" }}>
           {/* Banner */}
-          <div style={{
-            width: "100%", height: 180, background: "#3a3d42",
-            backgroundImage: profile!.banner_url ? `url(${profile!.banner_url})` : undefined,
-            backgroundSize: "cover", backgroundPosition: "center",
-          }} />
+          {profile!.banner_url ? (
+            <img
+              src={profile!.banner_url}
+              alt="banner"
+              style={{
+                width: "100%", height: 180, objectFit: "cover",
+                objectPosition: `center ${profile!.banner_position ?? 50}%`,
+                display: "block",
+              }}
+            />
+          ) : (
+            <div style={{ width: "100%", height: 180, background: "#3a3d42" }} />
+          )}
           <div style={{ padding: "0 24px 24px 24px", marginTop: -36 }}>
             <div style={{ display: "flex", alignItems: "flex-end", gap: 16, marginBottom: 12 }}>
               <div style={{ border: "3px solid #2c2e31", borderRadius: "50%", flexShrink: 0 }}>
