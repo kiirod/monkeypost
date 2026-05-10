@@ -16,7 +16,7 @@ The improved version of the older social media developed by [Kiirod](https://hom
 # Data Management
 We don't take any data from you, including your personal information such as legal name, house address, credit card numbers, etc... Monkeypost is just a social media for those who use Monkeytype, etc.. It would be really pointless and pathetic to add any type of tracking.
 
-More information; [Privacy Policy page](https://www.pj.mtgoals.cc/home/app/policy)
+More information; [Privacy Policy page](https://pj.mtgoals.cc/home/app/policy)
 
 # Discord server
 You can join our Discord server, 'Monkeytype Projects' by clicking [here](https://pj.mtgoals.cc/home/app/dsc)
