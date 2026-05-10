@@ -1111,13 +1111,16 @@ function EditProfileModal({
   const [bio, setBio] = useState("");
   const [bannerFile, setBannerFile] = useState<File | null>(null);
   const [bannerPreview, setBannerPreview] = useState<string | null>(null);
+  const [bannerPosition, setBannerPosition] = useState(50); // 0=top, 100=bottom
+  const [isDraggingBanner, setIsDraggingBanner] = useState(false);
   const bannerRef = useRef<HTMLInputElement>(null);
+  const bannerDragRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     async function fetchProfile() {
       const { data } = await supabase
         .from("profiles")
-        .select("username_last_changed, handle, bio, banner_url")
+        .select("username_last_changed, handle, bio, banner_url, banner_position")
         .eq("id", currentUser.id)
         .single();
       if (data?.username_last_changed) setUsernameLastChanged(data.username_last_changed);
@@ -1127,6 +1130,7 @@ function EditProfileModal({
       }
       if (data?.bio) setBio(data.bio);
       if (data?.banner_url) setBannerPreview(data.banner_url);
+      if (data?.banner_position !== null && data?.banner_position !== undefined) setBannerPosition(data.banner_position);
     }
     fetchProfile();
   }, [currentUser.id]);
@@ -1229,6 +1233,7 @@ function EditProfileModal({
     updateData.handle = finalHandle;
     updateData.bio = bio.trim() || null;
     if (banner_url) updateData.banner_url = banner_url;
+    (updateData as Record<string, unknown>).banner_position = bannerPosition;
 
     await supabase.from("profiles").update(updateData).eq("id", currentUser.id);
 
@@ -1348,12 +1353,56 @@ function EditProfileModal({
               if (!file) return;
               setBannerFile(file);
               setBannerPreview(URL.createObjectURL(file));
+              setBannerPosition(50);
             }} />
           {bannerPreview ? (
-            <div style={{ position: "relative", borderRadius: 8, overflow: "hidden", marginBottom: 6 }}>
-              <img src={bannerPreview} alt="banner" style={{ width: "100%", height: 120, objectFit: "cover", display: "block" }} />
+            <div style={{ marginBottom: 6 }}>
+              {/* Drag-to-reposition banner preview */}
+              <div
+                ref={bannerDragRef}
+                style={{ position: "relative", borderRadius: 8, overflow: "hidden", height: 120, cursor: isDraggingBanner ? "grabbing" : "grab", userSelect: "none" }}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  setIsDraggingBanner(true);
+                  const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+                  const onMove = (me: MouseEvent) => {
+                    const pct = Math.max(0, Math.min(100, ((me.clientY - rect.top) / rect.height) * 100));
+                    setBannerPosition(pct);
+                  };
+                  const onUp = () => {
+                    setIsDraggingBanner(false);
+                    window.removeEventListener("mousemove", onMove);
+                    window.removeEventListener("mouseup", onUp);
+                  };
+                  window.addEventListener("mousemove", onMove);
+                  window.addEventListener("mouseup", onUp);
+                }}
+                onTouchStart={(e) => {
+                  const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+                  const onMove = (te: TouchEvent) => {
+                    const pct = Math.max(0, Math.min(100, ((te.touches[0].clientY - rect.top) / rect.height) * 100));
+                    setBannerPosition(pct);
+                  };
+                  const onEnd = () => {
+                    window.removeEventListener("touchmove", onMove);
+                    window.removeEventListener("touchend", onEnd);
+                  };
+                  window.addEventListener("touchmove", onMove);
+                  window.addEventListener("touchend", onEnd);
+                }}
+              >
+                <img
+                  src={bannerPreview}
+                  alt="banner"
+                  draggable={false}
+                  style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: `center ${bannerPosition}%`, display: "block", pointerEvents: "none" }}
+                />
+                <div style={{ position: "absolute", inset: 0, background: "#00000033", display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
+                  <span style={{ color: "#ffffffcc", fontSize: 12, background: "#00000066", padding: "4px 10px", borderRadius: 6 }}>↕ Drag to reposition</span>
+                </div>
+              </div>
               <button onClick={() => bannerRef.current?.click()}
-                style={{ position: "absolute", inset: 0, background: "#00000066", border: "none", color: "#fff", fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>
+                style={{ marginTop: 6, background: "#3a3d42", border: "none", borderRadius: 8, padding: "6px 14px", color: "#d1d0c5", fontSize: 13, fontFamily: "inherit", cursor: "pointer" }}>
                 Change Banner
               </button>
             </div>
@@ -1901,7 +1950,7 @@ export default function Home() {
     sortedPostsRef.current = [];
     lastBatchRef.current = 0;
     setVisibleCount(PAGE_SIZE);
-    await loadPostsInner();
+    await Promise.all([loadPostsInner(), loadShadowbannedUsers(), loadVerifiedUsers()]);
     setRefreshing(false);
   }
 
@@ -2232,8 +2281,14 @@ export default function Home() {
   }
 
   async function handleAdminDelete(postId: string) {
+    // Optimistically remove from UI
     setPosts((prev) => prev.filter((p) => p.id !== postId));
-    await supabase.from("posts").delete().eq("id", postId);
+    const { error } = await supabase.from("posts").delete().eq("id", postId);
+    if (error) {
+      // If DB delete failed, reload to restore correct state
+      console.error("Admin delete failed:", error.message);
+      await loadPostsInner();
+    }
   }
 
   async function handleAdminShadowban(username: string) {
