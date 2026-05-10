@@ -314,6 +314,12 @@ const OwnerBadge = () => (
   </svg>
 );
 
+const FlagIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width={16} height={16} style={{ transform: "scaleX(-1)" }}>
+    <path fillRule="evenodd" clipRule="evenodd" d="M4 1C3.44772 1 3 1.44772 3 2V22C3 22.5523 3.44772 23 4 23C4.55228 23 5 22.5523 5 22V13.5983C5.46602 13.3663 6.20273 13.0429 6.99251 12.8455C8.40911 12.4914 9.54598 12.6221 10.168 13.555C11.329 15.2964 13.5462 15.4498 15.2526 15.2798C17.0533 15.1004 18.8348 14.5107 19.7354 14.1776C20.5267 13.885 21 13.1336 21 12.3408V5.72337C21 4.17197 19.3578 3.26624 18.0489 3.85981C16.9875 4.34118 15.5774 4.87875 14.3031 5.0563C12.9699 5.24207 12.1956 4.9907 11.832 4.44544C10.5201 2.47763 8.27558 2.24466 6.66694 2.37871C6.0494 2.43018 5.47559 2.53816 5 2.65249V2C5 1.44772 4.55228 1 4 1ZM5 4.72107V11.4047C5.44083 11.2247 5.95616 11.043 6.50747 10.9052C8.09087 10.5094 10.454 10.3787 11.832 12.4455C12.3106 13.1634 13.4135 13.4531 15.0543 13.2897C16.5758 13.1381 18.1422 12.6321 19 12.3172V5.72337C19 5.67794 18.9081 5.66623 18.875 5.68126C17.7575 6.18804 16.1396 6.81972 14.5791 7.03716C13.0776 7.24639 11.2104 7.1185 10.168 5.55488C9.47989 4.52284 8.2244 4.25586 6.83304 4.3718C6.12405 4.43089 5.46427 4.58626 5 4.72107Z" fill="currentColor"/>
+  </svg>
+);
+
 const RefreshIcon = ({ spinning }: { spinning?: boolean }) => (
   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width={16} height={16}
     style={spinning ? { animation: "spin 0.7s linear infinite" } : undefined}>
@@ -628,6 +634,26 @@ function ReplyItem({
   );
 }
 
+// ── Report Button ────────────────────────────────────────────────────────────────
+
+function ReportButton({ postId, onReport }: { postId: string; onReport: (id: string) => void }) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <button
+      onClick={(e) => { e.stopPropagation(); onReport(postId); }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      title="Report post"
+      style={{
+        display: "flex", alignItems: "center", background: "none", border: "none",
+        cursor: "pointer", color: hovered ? "#ca4754" : "#646669",
+        padding: 0, transition: "color 0.15s",
+      }}>
+      <FlagIcon />
+    </button>
+  );
+}
+
 // ── Post Card ─────────────────────────────────────────────────────────────────
 
 function PostCard({
@@ -644,6 +670,7 @@ function PostCard({
   onRepost,
   blockedUsers,
   verifiedUsers,
+  onReport,
 }: {
   post: Post;
   currentUser: { id: string; username: string; pfp_url: string | null } | null;
@@ -658,6 +685,7 @@ function PostCard({
   onRepost: (id: string) => void;
   blockedUsers: Set<string>;
   verifiedUsers: Set<string>;
+  onReport: (id: string) => void;
 }) {
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState("");
@@ -798,7 +826,7 @@ function PostCard({
             )}
           </div>
           {post.verified && (
-            <div style={{ color: "#e2b714", opacity: 0.5, fontSize: 11, marginTop: -2, marginBottom: 4 }}>Collaborator</div>
+            <div style={{ color: "#e2b714", opacity: 0.5, fontSize: 11, marginTop: -2, marginBottom: 4 }}>Staff</div>
           )}
 
           {editing ? (
@@ -881,6 +909,10 @@ function PostCard({
               <ViewsIcon />
               <span>{post.views ?? 0}</span>
             </div>
+
+            {!isOwner && (
+              <ReportButton postId={post.id} onReport={onReport} />
+            )}
 
             {isOwner && (
               <div style={{ display: "flex", gap: 8, marginLeft: "auto", alignItems: "center" }}>
@@ -1076,12 +1108,16 @@ function EditProfileModal({
 
   // Store the original handle so we know if it was a "default" (matched old username)
   const [originalHandle, setOriginalHandle] = useState("");
+  const [bio, setBio] = useState("");
+  const [bannerFile, setBannerFile] = useState<File | null>(null);
+  const [bannerPreview, setBannerPreview] = useState<string | null>(null);
+  const bannerRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     async function fetchProfile() {
       const { data } = await supabase
         .from("profiles")
-        .select("username_last_changed, handle")
+        .select("username_last_changed, handle, bio, banner_url")
         .eq("id", currentUser.id)
         .single();
       if (data?.username_last_changed) setUsernameLastChanged(data.username_last_changed);
@@ -1089,6 +1125,8 @@ function EditProfileModal({
         setNewHandle(data.handle);
         setOriginalHandle(data.handle);
       }
+      if (data?.bio) setBio(data.bio);
+      if (data?.banner_url) setBannerPreview(data.banner_url);
     }
     fetchProfile();
   }, [currentUser.id]);
@@ -1124,6 +1162,19 @@ function EditProfileModal({
     setSaving(true);
 
     let pfp_url = currentUser.pfp_url;
+    let banner_url: string | null = null;
+
+    // Upload banner if changed
+    if (bannerFile) {
+      const stripped = await stripImageMetadata(bannerFile);
+      const { data: bannerUpload } = await supabase.storage
+        .from("pfps")
+        .upload(`banner_${currentUser.id}.jpg`, stripped, { upsert: true });
+      if (bannerUpload) {
+        const { data: bannerUrlData } = supabase.storage.from("pfps").getPublicUrl(bannerUpload.path);
+        banner_url = bannerUrlData.publicUrl + `?t=${Date.now()}`;
+      }
+    }
 
     // Upload new pfp if changed
     if (pfpFile) {
@@ -1176,6 +1227,8 @@ function EditProfileModal({
       updateData.username_last_changed = new Date().toISOString();
     }
     updateData.handle = finalHandle;
+    updateData.bio = bio.trim() || null;
+    if (banner_url) updateData.banner_url = banner_url;
 
     await supabase.from("profiles").update(updateData).eq("id", currentUser.id);
 
@@ -1286,6 +1339,33 @@ function EditProfileModal({
           )}
         </div>
 
+        {/* Banner section */}
+        <div>
+          <label style={{ color: "#646669", fontSize: 12, display: "block", marginBottom: 6 }}>Profile Banner</label>
+          <input ref={bannerRef} type="file" accept=".jpeg,.jpg,.png,.avif,.webp" style={{ display: "none" }}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              setBannerFile(file);
+              setBannerPreview(URL.createObjectURL(file));
+            }} />
+          {bannerPreview ? (
+            <div style={{ position: "relative", borderRadius: 8, overflow: "hidden", marginBottom: 6 }}>
+              <img src={bannerPreview} alt="banner" style={{ width: "100%", height: 120, objectFit: "cover", display: "block" }} />
+              <button onClick={() => bannerRef.current?.click()}
+                style={{ position: "absolute", inset: 0, background: "#00000066", border: "none", color: "#fff", fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>
+                Change Banner
+              </button>
+            </div>
+          ) : (
+            <button onClick={() => bannerRef.current?.click()}
+              style={{ background: "#3a3d42", border: "none", borderRadius: 8, padding: "8px 14px", color: "#d1d0c5", fontSize: 13, fontFamily: "inherit", cursor: "pointer" }}>
+              Upload Banner
+            </button>
+          )}
+          <div style={{ color: "#646669", fontSize: 11, marginTop: 4, opacity: 0.5 }}>The image must be 680x240.</div>
+        </div>
+
         {/* Handle section */}
         <div>
           <label style={{ color: "#646669", fontSize: 12, display: "block", marginBottom: 6 }}>Handle <span style={{ opacity: 0.5 }}>(lowercase, no spaces)</span></label>
@@ -1300,6 +1380,21 @@ function EditProfileModal({
               outline: "none", boxSizing: "border-box",
             }} />
           <div style={{ color: "#646669", fontSize: 11, marginTop: 4 }}>@{newHandle || newUsername.toLowerCase()}</div>
+        </div>
+
+        {/* Bio section */}
+        <div>
+          <label style={{ color: "#646669", fontSize: 12, display: "block", marginBottom: 6 }}>Description / Bio <span style={{ opacity: 0.5 }}>({bio.length}/180)</span></label>
+          <textarea
+            value={bio}
+            onChange={(e) => setBio(e.target.value.slice(0, 180))}
+            rows={3}
+            placeholder="Tell people about yourself..."
+            style={{
+              width: "100%", background: "#3a3d42", border: "1px solid #3a3d42", borderRadius: 8,
+              padding: "10px 14px", color: "#fff", fontSize: 14, fontFamily: "inherit",
+              outline: "none", boxSizing: "border-box", resize: "none",
+            }} />
         </div>
 
         {error && <div style={{ color: "#ca4754", fontSize: 13 }}>{error}</div>}
@@ -1644,6 +1739,8 @@ export default function Home() {
   const [pfpPreview, setPfpPreview] = useState<string | null>(null);
   const [signupError, setSignupError] = useState("");
   const [authMode, setAuthMode] = useState<"signup" | "login">("signup");
+  const [signupHandle, setSignupHandle] = useState("");
+  const [loginHandle, setLoginHandle] = useState("");
 
   const [currentUser, setCurrentUser] = useState<{ id: string; username: string; pfp_url: string | null } | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
@@ -1699,6 +1796,7 @@ export default function Home() {
   const postRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   const [refreshing, setRefreshing] = useState(false);
+  const [reportToast, setReportToast] = useState(false);
 
   const pfpInputRef = useRef<HTMLInputElement>(null);
   const postImageRef = useRef<HTMLInputElement>(null);
@@ -1807,10 +1905,13 @@ export default function Home() {
     setRefreshing(false);
   }
 
-  // Infinite scroll: when 18th visible post enters view, load 20 more
+  // Infinite scroll: observe the 3rd-from-last rendered post; when it enters view load more
   useEffect(() => {
     if (view !== "posts" && view !== "bookmarks") return;
-    const targetIndex = visibleCount - 3;
+    // If all posts are already visible, nothing to load
+    if (visibleCount >= allVisiblePosts.length) return;
+    const renderedCount = Math.min(visibleCount, allVisiblePosts.length);
+    const targetIndex = Math.max(0, renderedCount - 3);
     const target = postRefs.current[targetIndex];
     if (!target) return;
 
@@ -1824,7 +1925,7 @@ export default function Home() {
     );
     observer.observe(target);
     return () => observer.disconnect();
-  }, [visibleCount, view, posts.length]);
+  }, [visibleCount, view, posts.length, allVisiblePosts.length]);
 
   function handlePfpPick(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -1837,12 +1938,17 @@ export default function Home() {
 
   async function handleSignup() {
     setSignupError("");
-    if (!validateUsername(username)) { setSignupError("Username must be 1–16 chars, letters and numbers only."); return; }
+    if (!validateUsername(username)) { setSignupError("Display name must be 1–16 chars, letters and numbers only."); return; }
+    if (!signupHandle.trim() || !/^[a-z0-9_]{1,16}$/.test(signupHandle)) { setSignupError("Handle must be 1–16 chars, lowercase letters, numbers, underscores only."); return; }
     if (!password || password.length < 6) { setSignupError("Password must be at least 6 characters."); return; }
     setStep("loading");
 
+    // Check handle uniqueness
+    const { data: existingHandle } = await supabase.from("profiles").select("id").eq("handle", signupHandle).single();
+    if (existingHandle) { setStep("signup"); setSignupError("That handle is already taken."); return; }
+
     const { data: authData, error: authErr } = await supabase.auth.signUp({
-      email: `${username.toLowerCase()}@monkeypost.local`,
+      email: `${signupHandle}@monkeypost.local`,
       password,
     });
 
@@ -1861,7 +1967,7 @@ export default function Home() {
       }
     }
 
-    await supabase.from("profiles").upsert({ id: uid, username, handle: username.toLowerCase(), pfp_url });
+    await supabase.from("profiles").upsert({ id: uid, username, handle: signupHandle, pfp_url });
     setCurrentUser({ id: uid, username, pfp_url });
     await loadPosts();
     setStep("app");
@@ -1869,13 +1975,13 @@ export default function Home() {
 
   async function handleLogin() {
     setSignupError("");
-    if (!username.trim() || !password) { setSignupError("Please enter your username and password."); return; }
+    if (!loginHandle.trim() || !password) { setSignupError("Please enter your handle and password."); return; }
     setStep("loading");
     const { data: authData, error: authErr } = await supabase.auth.signInWithPassword({
-      email: `${username.toLowerCase()}@monkeypost.local`,
+      email: `${loginHandle.toLowerCase()}@monkeypost.local`,
       password,
     });
-    if (authErr || !authData.user) { setStep("signup"); setSignupError("Invalid username or password."); return; }
+    if (authErr || !authData.user) { setStep("signup"); setSignupError("Invalid handle or password."); return; }
     const { data: profile } = await supabase.from("profiles").select("*").eq("id", authData.user.id).single();
     if (!profile) { setStep("signup"); setSignupError("Account not found."); return; }
     setCurrentUser({ id: authData.user.id, username: profile.username, pfp_url: profile.pfp_url });
@@ -2106,6 +2212,25 @@ export default function Home() {
     await supabase.from("posts").update({ reposted_by: newRepostedBy }).eq("id", postId);
   }
 
+  async function handleReport(postId: string) {
+    // Show toast
+    setReportToast(true);
+    setTimeout(() => setReportToast(false), 3000);
+
+    // Copy post link
+    const postUrl = `${window.location.origin}/posts/${postId}`;
+    try { await navigator.clipboard.writeText(postUrl); } catch {}
+
+    // Send to Discord webhook via API route (server-side, key not exposed)
+    try {
+      await fetch("/api/report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ postId, postUrl, reportedBy: currentUser?.username ?? "anonymous" }),
+      });
+    } catch {}
+  }
+
   async function handleAdminDelete(postId: string) {
     setPosts((prev) => prev.filter((p) => p.id !== postId));
     await supabase.from("posts").delete().eq("id", postId);
@@ -2239,9 +2364,21 @@ export default function Home() {
             ))}
           </div>
 
-          <input value={username} onChange={(e) => { const val = e.target.value.replace(/[^a-zA-Z0-9]/g, "").slice(0, 16); setUsername(val); }}
-            placeholder="Username" maxLength={16}
-            style={{ background: "#2c2e31", border: "1px solid #3a3d42", borderRadius: 8, padding: "12px 16px", color: "#fff", fontSize: 15, fontFamily: "inherit", outline: "none", width: "100%", boxSizing: "border-box" }} />
+          {authMode === "signup" ? (
+            <input value={username} onChange={(e) => { const val = e.target.value.replace(/[^a-zA-Z0-9]/g, "").slice(0, 16); setUsername(val); }}
+              placeholder="Display Name" maxLength={16}
+              style={{ background: "#2c2e31", border: "1px solid #3a3d42", borderRadius: 8, padding: "12px 16px", color: "#fff", fontSize: 15, fontFamily: "inherit", outline: "none", width: "100%", boxSizing: "border-box" }} />
+          ) : (
+            <input value={loginHandle} onChange={(e) => setLoginHandle(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 16))}
+              placeholder="Handle (e.g. kiirod)"
+              style={{ background: "#2c2e31", border: "1px solid #3a3d42", borderRadius: 8, padding: "12px 16px", color: "#fff", fontSize: 15, fontFamily: "inherit", outline: "none", width: "100%", boxSizing: "border-box" }} />
+          )}
+
+          {authMode === "signup" && (
+            <input value={signupHandle} onChange={(e) => setSignupHandle(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 16))}
+              placeholder="Handle (e.g. kiirod)"
+              style={{ background: "#2c2e31", border: "1px solid #3a3d42", borderRadius: 8, padding: "12px 16px", color: "#fff", fontSize: 15, fontFamily: "inherit", outline: "none", width: "100%", boxSizing: "border-box" }} />
+          )}
 
           <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && (authMode === "login" ? handleLogin() : handleSignup())}
@@ -2292,7 +2429,12 @@ export default function Home() {
 
   return (
     <main style={{ minHeight: "100vh", background: "#323437", fontFamily: "var(--font-roboto-mono), monospace", display: "flex", flexDirection: "column" }}>
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+      <style>{`
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes toastIn { from { opacity: 0; transform: translateY(-12px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes notifFlash { 0% { border-color: #3a3d42; } 30% { border-color: #e2b714; box-shadow: 0 0 8px #e2b71440; } 70% { border-color: #e2b714; box-shadow: 0 0 8px #e2b71440; } 100% { border-color: #3a3d42; } }
+        .notif-new { animation: notifFlash 1s ease forwards; }
+      `}</style>
       {showEditProfile && currentUser && (
         <EditProfileModal
           currentUser={currentUser}
@@ -2332,6 +2474,19 @@ export default function Home() {
             setStep("signup");
           }}
         />
+      )}
+
+      {/* Report toast */}
+      {reportToast && (
+        <div style={{
+          position: "fixed", top: 20, left: 20, zIndex: 999,
+          background: "#2c2e31", border: "1px solid #ca4754", borderRadius: 10,
+          padding: "12px 20px", color: "#d1d0c5", fontSize: 14, fontWeight: 600,
+          animation: "toastIn 0.25s ease",
+          display: "flex", alignItems: "center", gap: 10,
+        }}>
+          <span style={{ color: "#ca4754" }}>⚑</span> Post reported. Link copied.
+        </div>
       )}
 
       <div style={{ width: "100%", padding: "16px 32px", borderBottom: "1px solid #3a3d42", display: "flex", alignItems: "center", gap: 16, position: "sticky", top: 0, background: "#323437", zIndex: 10 }}>
@@ -2384,14 +2539,26 @@ export default function Home() {
               { label: "Developers", icon: <DevIcon />, action: () => window.location.href = "/dev" },
               { label: "GitHub", icon: <SupportIcon />, action: () => window.location.href = "/gh" },
               { label: "Bookmarks", icon: <BookmarkIcon filled />, action: () => { setView("bookmarks"); window.history.pushState(null, "", "/bookmarks"); } },
-            ].map(({ label, icon, action }) => (
-              <button key={label} onClick={action}
-                style={{ display: "flex", alignItems: "center", gap: 12, background: "none", border: "none", cursor: "pointer", color: "#d1d0c5", fontSize: 14, fontFamily: "inherit", padding: "10px 12px", borderRadius: 8, textAlign: "left", transition: "background 0.15s", width: "100%" }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "#2c2e31")}
-                onMouseLeave={(e) => (e.currentTarget.style.background = "none")}>
-                {icon}<span>{label}</span>
-              </button>
-            ))}
+            ].map(({ label, icon, action }) => {
+              const isActive =
+                (label === "Posts" && view === "posts") ||
+                (label === "Bookmarks" && view === "bookmarks") ||
+                (label === "Notifications" && view === "notifications");
+              return (
+                <button key={label} onClick={action}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 12, background: isActive ? "#2c2e31" : "none",
+                    border: "none", cursor: isActive ? "default" : "pointer",
+                    color: isActive ? "#646669" : "#d1d0c5",
+                    fontSize: 14, fontFamily: "inherit", padding: "10px 12px", borderRadius: 8,
+                    textAlign: "left", transition: "background 0.15s, color 0.15s", width: "100%",
+                  }}
+                  onMouseEnter={(e) => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = "#2c2e31"; }}
+                  onMouseLeave={(e) => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = "none"; }}>
+                  {icon}<span>{label}</span>
+                </button>
+              );
+            })}
           </nav>
 
           {/* User card with logout/edit on hover */}
@@ -2528,13 +2695,21 @@ export default function Home() {
                   No notifications yet.
                 </div>
               )}
-              {notifications.map((notif) => (
-                <div key={notif.id} style={{
-                  background: notif.read ? "#2c2e31" : "#2c2e31",
-                  borderRadius: 12, padding: "14px 18px", marginBottom: 10,
-                  border: `1px solid ${notif.read ? "#3a3d42" : "#e2b714"}`,
-                  opacity: notif.read ? 0.7 : 1,
-                }}>
+              {notifications
+                .filter((n) => {
+                  // Only show notifications newer than 7 days
+                  const age = Date.now() - new Date(n.created_at).getTime();
+                  return age < 7 * 24 * 60 * 60 * 1000;
+                })
+                .map((notif) => (
+                <div key={notif.id}
+                  className={!notif.read ? "notif-new" : ""}
+                  style={{
+                    background: "#2c2e31",
+                    borderRadius: 12, padding: "14px 18px", marginBottom: 10,
+                    border: `1px solid ${notif.read ? "#3a3d42" : "#e2b714"}`,
+                    opacity: notif.read ? 0.7 : 1,
+                  }}>
                   <div style={{ color: "#e2b714", fontSize: 13, fontWeight: 700, marginBottom: 4 }}>
                     @{notif.from_username}{" "}
                     <span style={{ color: "#d1d0c5", fontWeight: 400 }}>
@@ -2577,6 +2752,7 @@ export default function Home() {
                     onRepost={handleRepost}
                     blockedUsers={blockedUsers}
                     verifiedUsers={verifiedUsers}
+                    onReport={handleReport}
                     isAdmin={currentUser?.username.toLowerCase() === ADMIN_USER}
                     isShadowbanned={shadowbannedUsers.has(post.username.toLowerCase())}
                     onAdminDelete={handleAdminDelete}
