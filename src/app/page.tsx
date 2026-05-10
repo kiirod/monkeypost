@@ -1255,8 +1255,8 @@ function EditProfileModal({
       const bulkPostUpdate: Record<string, unknown> = {
         handle: finalHandle,
         verified: verifiedCheck?.verified ?? false,
+        pfp_url: pfp_url, // always sync pfp — covers both new uploads and existing URL
       };
-      if (pfpFile) bulkPostUpdate.pfp_url = pfp_url;
       if (usernameChanged) bulkPostUpdate.username = newUsername;
       await supabase.from("posts").update(bulkPostUpdate).eq("user_id", currentUser.id);
     }
@@ -2304,6 +2304,13 @@ export default function Home() {
       }
       return p;
     }));
+    // Update linked accounts list so the accounts switcher shows the new pfp/username
+    if (currentUser) {
+      const updated = linkedAccounts.map((a) =>
+        a.id === currentUser.id ? { ...a, username: newUsername, pfp_url: newPfpUrl } : a
+      );
+      saveLinkedAccounts(updated);
+    }
     setShowEditProfile(false);
     loadPostsInner();
   }
