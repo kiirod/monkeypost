@@ -126,7 +126,24 @@ interface Profile {
   username: string;
   handle: string;
   pfp_url: string | null;
+  banner_url?: string | null;
+  bio?: string | null;
   verified?: boolean;
+  created_at?: string;
+}
+
+function ordinal(n: number): string {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
+function formatJoinDate(dateStr: string): string {
+  const d = new Date(dateStr);
+  const day = ordinal(d.getDate());
+  const month = d.toLocaleString("default", { month: "long" });
+  const year = d.getFullYear();
+  return `${day} ${month} ${year}`;
 }
 
 export default function UserProfile() {
@@ -277,20 +294,42 @@ export default function UserProfile() {
 
       <div style={{ maxWidth: 680, width: "100%", margin: "0 auto", padding: "32px 16px" }}>
         {/* Profile header */}
-        <div style={{ background: "#2c2e31", borderRadius: 14, padding: "24px", border: "1px solid #3a3d42", marginBottom: 24 }}>
-          <div style={{ display: "flex", alignItems: "flex-start", gap: 16 }}>
-            <Avatar url={profile!.pfp_url} username={profile!.username} size={72} />
+        <div style={{ background: "#2c2e31", borderRadius: 14, border: "1px solid #3a3d42", marginBottom: 24, overflow: "hidden" }}>
+          {/* Banner */}
+          <div style={{
+            width: "100%", height: 180, background: "#3a3d42",
+            backgroundImage: profile!.banner_url ? `url(${profile!.banner_url})` : undefined,
+            backgroundSize: "cover", backgroundPosition: "center",
+          }} />
+          <div style={{ padding: "0 24px 24px 24px", marginTop: -36 }}>
+            <div style={{ display: "flex", alignItems: "flex-end", gap: 16, marginBottom: 12 }}>
+              <div style={{ border: "3px solid #2c2e31", borderRadius: "50%", flexShrink: 0 }}>
+                <Avatar url={profile!.pfp_url} username={profile!.username} size={72} />
+              </div>
+            </div>
             <div style={{ flex: 1 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
                 <span style={{ color: "#e2b714", fontWeight: 700, fontSize: 20 }}>{profile!.username}</span>
                 {profile!.verified && <OwnerBadge />}
               </div>
-              <div style={{ color: "#646669", fontSize: 14, marginBottom: 12 }}>@{profile!.handle || profile!.username.toLowerCase()}</div>
-              <div style={{ display: "flex", gap: 20, marginBottom: 16 }}>
+              <div style={{ color: "#646669", fontSize: 14, marginBottom: 8 }}>@{profile!.handle || profile!.username.toLowerCase()}</div>
+              {profile!.bio ? (
+                <div style={{ color: "#d1d0c5", fontSize: 14, lineHeight: 1.5, marginBottom: 12 }}>
+                  {renderWithTwemoji(profile!.bio)}
+                </div>
+              ) : (
+                <div style={{ color: "#646669", fontSize: 13, opacity: 0.5, marginBottom: 12 }}>This user doesn&apos;t have a bio.</div>
+              )}
+              <div style={{ display: "flex", gap: 20, marginBottom: 8 }}>
                 <span style={{ color: "#d1d0c5", fontSize: 13 }}><span style={{ color: "#fff", fontWeight: 700 }}>{followerCount}</span> followers</span>
                 <span style={{ color: "#d1d0c5", fontSize: 13 }}><span style={{ color: "#fff", fontWeight: 700 }}>{followingCount}</span> following</span>
                 <span style={{ color: "#d1d0c5", fontSize: 13 }}><span style={{ color: "#fff", fontWeight: 700 }}>{posts.length}</span> posts</span>
               </div>
+              {profile!.created_at && (
+                <div style={{ color: "#646669", fontSize: 11, opacity: 0.5, marginBottom: 12 }}>
+                  Joined on {formatJoinDate(profile!.created_at)}
+                </div>
+              )}
               {!isOwnProfile && currentUser && (
                 <div style={{ display: "flex", gap: 8 }}>
                   <button onClick={handleFollow}
