@@ -19,7 +19,7 @@ We don't take any data from you, including your personal information such as leg
 More information; [Privacy Policy page](https://www.mtgoals.cc/pages/policy)
 
 # Discord server
-You can join our Discord server, 'Monkeytype Projects' by clicking [here](https://dsc.gg/mtprojects)
+You can join our Discord server, 'Monkeytype Projects' by clicking [here](https://pj.mtgoals.cc/home/app/dsc)
 
 # License
-Our project uses the MIT License, to view the license, you can click [this](https://github.com/kiirod/monkeypost/blob/main/LICENSE)
+Our project uses the MIT License, to view the license, you can click [this](https://pj.mtgoals.cc/home/app/post/lic)
