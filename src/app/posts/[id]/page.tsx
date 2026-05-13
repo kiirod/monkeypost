@@ -3,14 +3,11 @@
 import { useState, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { useParams } from "next/navigation";
-import { VERIFIED_USERS } from "@/constants";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
-
-const ADMIN_USER = "kiirod";
 
 function getTwemojiUrl(emoji: string): string {
   const cp = [...emoji].map((c) => c.codePointAt(0)!.toString(16)).join("-");
@@ -89,21 +86,6 @@ const CommentIcon = () => (
   </svg>
 );
 
-const TrashIcon = () => (
-  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width={16} height={16}>
-    <path d="M3 6H5H21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-    <path d="M8 6V4C8 3.46957 8.21071 2.96086 8.58579 2.58579C8.96086 2.21071 9.46957 2 10 2H14C14.5304 2 15.0391 2.21071 15.4142 2.58579C15.7893 2.96086 16 3.46957 16 4V6M19 6L18.1168 19.1042C18.0504 20.1554 17.1886 21 16.135 21H7.86502C6.81138 21 5.94962 20.1554 5.88316 19.1042L5 6H19Z"
-      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-  </svg>
-);
-
-const BanIcon = () => (
-  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width={16} height={16}>
-    <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2"/>
-    <path d="M5.63 5.63l12.74 12.74" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-  </svg>
-);
-
 function Avatar({ url, username, size = 36 }: { url: string | null; username: string; size?: number }) {
   const initials = username?.slice(0, 2).toUpperCase() ?? "??";
   if (url) return <img src={url} alt={username} style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />;
@@ -114,6 +96,7 @@ function Avatar({ url, username, size = 36 }: { url: string | null; username: st
   );
 }
 
+const VERIFIED_USERS = new Set(["kiirod", "puppyboy", "asd", "ripvip", "testaccount123"]);
 const OwnerBadge = () => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#e2b714" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width={16} height={16} style={{ display: "inline-block", verticalAlign: "middle", marginLeft: 4 }}>
     <path d="M12 3a3.6 3.6 0 00-3.05 1.68 3.6 3.6 0 00-.9-.1 3.6 3.6 0 00-2.42 1.06 3.6 3.6 0 00-.94 3.32A3.6 3.6 0 003 12a3.6 3.6 0 001.69 3.05 3.6 3.6 0 00.95 3.32 3.6 3.6 0 003.35.96A3.6 3.6 0 0012 21a3.6 3.6 0 003.04-1.67 3.6 3.6 0 004.3-4.3A3.6 3.6 0 0021 12a3.6 3.6 0 00-1.67-3.04v0a3.6 3.6 0 00-4.3-4.3A3.6 3.6 0 0012 3z" />
@@ -179,6 +162,7 @@ function ReplyThread({
       replies: [],
     };
 
+    // We need to fetch the full post comments and insert the reply at the right place
     const { data: postData } = await supabase.from("posts").select("comments").eq("id", postId).single();
     if (!postData) return;
 
@@ -250,8 +234,6 @@ export default function PostPage() {
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [commentText, setCommentText] = useState("");
-  const [isShadowbanned, setIsShadowbanned] = useState(false);
-  const [adminDeleted, setAdminDeleted] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -265,12 +247,6 @@ export default function PostPage() {
       if (!data) { setNotFound(true); setLoading(false); return; }
       setPost(data as Post);
       await supabase.from("posts").update({ views: (data.views ?? 0) + 1 }).eq("id", postId);
-
-      // Check if post author is shadowbanned
-      const { data: authorProfile } = await supabase
-        .from("profiles").select("shadowbanned").eq("username", data.username).single();
-      if (authorProfile?.shadowbanned) setIsShadowbanned(true);
-
       setLoading(false);
     }
     load();
@@ -320,34 +296,6 @@ export default function PostPage() {
   function handleCommentsUpdate(updated: Comment[]) {
     setPost((p) => p ? { ...p, comments: updated } : p);
   }
-
-  async function adminDeletePost() {
-    if (!post) return;
-    await supabase.from("posts").delete().eq("id", post.id);
-    setAdminDeleted(true);
-  }
-
-  async function adminShadowban() {
-    if (!post) return;
-    await supabase.from("profiles").update({ shadowbanned: true }).eq("username", post.username);
-    setIsShadowbanned(true);
-  }
-
-  const isAdmin = currentUser?.username.toLowerCase() === ADMIN_USER;
-  const isPostOwner = currentUser?.id === post?.user_id;
-
-  if (adminDeleted) return (
-    <main style={{ minHeight: "100vh", background: "#323437", fontFamily: "var(--font-roboto-mono), monospace", display: "flex", flexDirection: "column" }}>
-      <div style={{ width: "100%", padding: "16px 32px", borderBottom: "1px solid #3a3d42", display: "flex", alignItems: "center" }}>
-        <a href="/" style={{ fontSize: 22, fontWeight: 700, color: "#e2b714", textDecoration: "none" }}>monkeypost</a>
-      </div>
-      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 12 }}>
-        <div style={{ fontSize: 40 }}>🗑️</div>
-        <div style={{ color: "#d1d0c5", fontSize: 16 }}>Post deleted.</div>
-        <a href="/" style={{ color: "#e2b714", fontSize: 13 }}>← Back to feed</a>
-      </div>
-    </main>
-  );
 
   if (loading) return (
     <main style={{ minHeight: "100vh", background: "#323437", fontFamily: "var(--font-roboto-mono), monospace", display: "flex", flexDirection: "column" }}>
@@ -400,23 +348,6 @@ export default function PostPage() {
               <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 2 }}>
                 <a href={`/users/${post!.handle ?? post!.username.toLowerCase()}`} style={{ color: "#e2b714", fontWeight: 700, fontSize: 15, textDecoration: "none" }}>{post!.username}</a>
                 {VERIFIED_USERS.has(post!.username.toLowerCase()) && <OwnerBadge />}
-                {isShadowbanned && isAdmin && (
-                  <span style={{ color: "#ca4754", fontSize: 10, background: "#ca475422", borderRadius: 4, padding: "1px 6px" }}>shadowbanned</span>
-                )}
-                {isAdmin && post!.username.toLowerCase() !== ADMIN_USER && (
-                  <div style={{ display: "flex", gap: 6, marginLeft: 8 }}>
-                    <button onClick={adminDeletePost} title="Admin delete post"
-                      style={{ background: "none", border: "none", cursor: "pointer", color: "#ca4754", padding: 0, display: "flex", opacity: 0.8 }}>
-                      <TrashIcon />
-                    </button>
-                    {!isShadowbanned && (
-                      <button onClick={adminShadowban} title="Shadowban user"
-                        style={{ background: "none", border: "none", cursor: "pointer", color: "#ca4754", padding: 0, display: "flex", opacity: 0.8 }}>
-                        <BanIcon />
-                      </button>
-                    )}
-                  </div>
-                )}
               </div>
               <div style={{ color: "#646669", fontSize: 12, marginBottom: 12 }}>@{post!.handle ?? post!.username.toLowerCase()}</div>
               <div style={{ fontSize: 16, lineHeight: 1.6, wordBreak: "break-word", color: "#d1d0c5", marginBottom: 16 }}>
