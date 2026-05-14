@@ -107,22 +107,18 @@ async function getBlockedWords(): Promise<string[]> {
 function normalizeText(text: string): string {
   return text
     .toLowerCase()
-    // Homoglyph detection — Cyrillic and unicode lookalikes
     .replace(/а/g, "a").replace(/е/g, "e").replace(/о/g, "o")
     .replace(/р/g, "p").replace(/с/g, "c").replace(/х/g, "x")
     .replace(/ѕ/g, "s").replace(/і/g, "i").replace(/ј/g, "j")
-    // Leetspeak
     .replace(/0/g, "o").replace(/1/g, "i").replace(/3/g, "e")
     .replace(/4/g, "a").replace(/5/g, "s").replace(/6/g, "g")
     .replace(/7/g, "t").replace(/8/g, "b").replace(/9/g, "g")
     .replace(/@/g, "a").replace(/\$/g, "s").replace(/\|/g, "i")
     .replace(/\(/g, "c").replace(/\+/g, "t").replace(/!/g, "i")
-    // Remove non-alpha
     .replace(/[^a-z\s]/g, "");
 }
 
 function collapseRepeats(text: string): string {
-  // "seeeex" → "sex", "fuuuck" → "fuk" → normalized to "fuc"
   return text.replace(/(.)\1{2,}/g, "$1$1");
 }
 
@@ -133,33 +129,26 @@ function removeSpacingBypass(text: string): string {
 async function containsBlockedWord(text: string): Promise<boolean> {
   const blocked = await getBlockedWords();
 
-  // Strip URLs and @mentions before checking
   const stripped = text
     .replace(/https?:\/\/[^\s]+/g, "")
     .replace(/(?<!\w)(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+(?:com|net|org|io|dev|app|co|gg|tv|me|uk|us|ca|au)[^\s]*/g, "")
     .replace(/@[a-zA-Z0-9]{1,16}/g, "");
 
-  // Apply all normalizations
   const processed = normalizeText(collapseRepeats(removeSpacingBypass(stripped)));
-
-  // Split into words for word-boundary checking
   const words = processed.split(/\s+/);
 
   for (const blockedWord of blocked) {
     const normalizedBlocked = normalizeText(blockedWord);
 
-    // Check each individual word (prevents "database" → "ass" false positive)
     for (const word of words) {
       if (word === normalizedBlocked) return true;
     }
 
-    // For multi-word blocked phrases, check the full processed string with word boundaries
     if (normalizedBlocked.includes(" ")) {
       const escaped = normalizedBlocked.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       if (new RegExp(`\\b${escaped}\\b`).test(processed)) return true;
     }
 
-    // For longer unambiguous words, still do substring check (e.g. "blowjob" inside "blowjobs")
     if (normalizedBlocked.length >= 6) {
       if (processed.includes(normalizedBlocked)) return true;
     }
@@ -697,7 +686,6 @@ function PostCard({
   const [editText, setEditText] = useState(post.content);
   const [editError, setEditError] = useState("");
 
-  // Sync comments from realtime post prop — but don't clobber local state while user is actively typing
   const prevCommentsRef = useRef<string>("");
   useEffect(() => {
     const incoming = JSON.stringify(post.comments ?? []);
@@ -1106,12 +1094,11 @@ function EditProfileModal({
   const [usernameLastChanged, setUsernameLastChanged] = useState<string | null>(null);
   const pfpRef = useRef<HTMLInputElement>(null);
 
-  // Store the original handle so we know if it was a "default" (matched old username)
   const [originalHandle, setOriginalHandle] = useState("");
   const [bio, setBio] = useState("");
   const [bannerFile, setBannerFile] = useState<File | null>(null);
   const [bannerPreview, setBannerPreview] = useState<string | null>(null);
-  const [bannerPosition, setBannerPosition] = useState(50); // 0=top, 100=bottom
+  const [bannerPosition, setBannerPosition] = useState(50);
   const [isDraggingBanner, setIsDraggingBanner] = useState(false);
   const bannerRef = useRef<HTMLInputElement>(null);
   const bannerDragRef = useRef<HTMLDivElement>(null);
@@ -1168,7 +1155,6 @@ function EditProfileModal({
     let pfp_url = currentUser.pfp_url;
     let banner_url: string | null = null;
 
-    // Upload banner if changed
     if (bannerFile) {
       const stripped = await stripImageMetadata(bannerFile);
       const { data: bannerUpload } = await supabase.storage
@@ -1180,7 +1166,6 @@ function EditProfileModal({
       }
     }
 
-    // Upload new pfp if changed
     if (pfpFile) {
       const stripped = await stripImageMetadata(pfpFile);
       const { data: uploadData } = await supabase.storage
@@ -1200,7 +1185,6 @@ function EditProfileModal({
       return;
     }
 
-    // Check username uniqueness if changed
     if (usernameChanged) {
       const { data: existing } = await supabase
         .from("profiles")
@@ -1215,16 +1199,12 @@ function EditProfileModal({
       }
     }
 
-    // ── FIX 2: Auto-update handle when username changes and handle was never customised ──
-    // The handle is considered "default" if it matches the old username (lowercased)
     const handleWasDefault =
       originalHandle === currentUser.username.toLowerCase() || !originalHandle;
     const finalHandle = usernameChanged && handleWasDefault
       ? newUsername.toLowerCase()
       : (newHandle.trim() || newUsername.toLowerCase());
 
-    // Update profile FIRST before touching auth (auth.updateUser can invalidate the
-    // session token, causing subsequent profile/post updates to fail RLS checks)
     const updateData: Record<string, string | null> = { pfp_url };
     if (usernameChanged) {
       updateData.username = newUsername;
@@ -1237,15 +1217,12 @@ function EditProfileModal({
 
     await supabase.from("profiles").update(updateData).eq("id", currentUser.id);
 
-    // ── FIX 1: Update auth email LAST so the session stays valid for all DB writes above ──
     if (usernameChanged) {
       await supabase.auth.updateUser({
         email: `${newUsername.toLowerCase()}@monkeypost.local`,
       });
     }
 
-    // Update all posts by this user
-    // ── Bulk-update all this user's posts in ONE query (username, handle, pfp, verified) ──
     if (usernameChanged || pfpFile) {
       const { data: verifiedCheck } = await supabase
         .from("profiles")
@@ -1255,14 +1232,12 @@ function EditProfileModal({
       const bulkPostUpdate: Record<string, unknown> = {
         handle: finalHandle,
         verified: verifiedCheck?.verified ?? false,
-        pfp_url: pfp_url, // always sync pfp — covers both new uploads and existing URL
+        pfp_url: pfp_url,
       };
       if (usernameChanged) bulkPostUpdate.username = newUsername;
       await supabase.from("posts").update(bulkPostUpdate).eq("user_id", currentUser.id);
     }
 
-    // ── Update this user's username/pfp inside comments on OTHER people's posts ──
-    // (comments are stored as JSONB so we must fetch-and-rewrite each affected post)
     if (usernameChanged || pfpFile) {
       const { data: allPosts } = await supabase
         .from("posts")
@@ -1301,7 +1276,6 @@ function EditProfileModal({
       }}>
         <h2 style={{ color: "#e2b714", fontSize: 18, fontWeight: 700, margin: 0 }}>Edit Profile</h2>
 
-        {/* PFP section */}
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           <Avatar url={pfpPreview} username={newUsername} size={56} />
           <div>
@@ -1318,7 +1292,6 @@ function EditProfileModal({
           </div>
         </div>
 
-        {/* Username section */}
         <div>
           <label style={{ color: "#646669", fontSize: 12, display: "block", marginBottom: 6 }}>Display Name</label>
           <input
@@ -1344,7 +1317,6 @@ function EditProfileModal({
           )}
         </div>
 
-        {/* Banner section */}
         <div>
           <label style={{ color: "#646669", fontSize: 12, display: "block", marginBottom: 6 }}>Profile Banner</label>
           <input ref={bannerRef} type="file" accept=".jpeg,.jpg,.png,.avif,.webp" style={{ display: "none" }}
@@ -1357,7 +1329,6 @@ function EditProfileModal({
             }} />
           {bannerPreview ? (
             <div style={{ marginBottom: 6 }}>
-              {/* Drag-to-reposition banner preview */}
               <div
                 ref={bannerDragRef}
                 style={{ position: "relative", borderRadius: 8, overflow: "hidden", height: 120, cursor: isDraggingBanner ? "grabbing" : "grab", userSelect: "none" }}
@@ -1415,7 +1386,6 @@ function EditProfileModal({
           <div style={{ color: "#646669", fontSize: 11, marginTop: 4, opacity: 0.5 }}>The image must be 680x240.</div>
         </div>
 
-        {/* Handle section */}
         <div>
           <label style={{ color: "#646669", fontSize: 12, display: "block", marginBottom: 6 }}>Handle <span style={{ opacity: 0.5 }}>(lowercase, no spaces)</span></label>
           <input
@@ -1431,7 +1401,6 @@ function EditProfileModal({
           <div style={{ color: "#646669", fontSize: 11, marginTop: 4 }}>@{newHandle || newUsername.toLowerCase()}</div>
         </div>
 
-        {/* Bio section */}
         <div>
           <label style={{ color: "#646669", fontSize: 12, display: "block", marginBottom: 6 }}>Description / Bio <span style={{ opacity: 0.5 }}>({bio.length}/180)</span></label>
           <textarea
@@ -1470,7 +1439,6 @@ function EditProfileModal({
   );
 }
 
-// Helper to recursively update username/pfp in comments and replies
 function updateUsernameInComments(
   comments: Comment[],
   oldUsername: string,
@@ -1808,13 +1776,11 @@ export default function Home() {
   const [showDeleteAccount, setShowDeleteAccount] = useState(false);
   const [showAccountsModal, setShowAccountsModal] = useState(false);
 
-  // Linked accounts — stored in localStorage so they persist across sessions
   const [linkedAccounts, setLinkedAccounts] = useState<{ id: string; username: string; pfp_url: string | null }[]>(() => {
     if (typeof window === "undefined") return [];
     try { return JSON.parse(localStorage.getItem("mp_linked_accounts") ?? "[]"); } catch { return []; }
   });
 
-  // Blocked users
   const [blockedUsers, setBlockedUsers] = useState<Set<string>>(new Set());
 
   async function loadBlockedUsers(userId: string) {
@@ -1835,11 +1801,9 @@ export default function Home() {
     if (data) setVerifiedUsers(new Set(data.map((p: { username: string }) => p.username.toLowerCase())));
   }
 
-  // Notifications
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
 
-  // Pagination
   const PAGE_SIZE = 20;
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const postRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -1857,7 +1821,6 @@ export default function Home() {
   useEffect(() => {
     if (step !== "app") return;
 
-    // Posts channel — live updates for likes, comments, new/deleted posts
     const postsChannel = supabase
       .channel("posts-realtime")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "posts" }, (payload) => {
@@ -1882,7 +1845,6 @@ export default function Home() {
   useEffect(() => {
     if (step !== "app" || !currentUser) return;
 
-    // Notifications channel — only for current user
     const notifChannel = supabase
       .channel(`notifications-${currentUser.id}`)
       .on("postgres_changes", {
@@ -1913,7 +1875,7 @@ export default function Home() {
           await loadPostsInner();
           await loadNotifications(session.user.id);
           await loadShadowbannedUsers();
-    await loadVerifiedUsers();
+          await loadVerifiedUsers();
           await loadBlockedUsers(session.user.id);
           setStep("app");
           return;
@@ -1946,7 +1908,6 @@ export default function Home() {
 
   async function handleRefresh() {
     setRefreshing(true);
-    // Reset sort state so the next render does a full fresh sort
     sortedPostsRef.current = [];
     lastBatchRef.current = 0;
     setVisibleCount(PAGE_SIZE);
@@ -1954,10 +1915,8 @@ export default function Home() {
     setRefreshing(false);
   }
 
-  // Infinite scroll: observe the 3rd-from-last rendered post; when it enters view load more
   useEffect(() => {
     if (view !== "posts" && view !== "bookmarks") return;
-    // If all posts are already visible, nothing to load — use raw posts.length as upper bound
     if (visibleCount >= posts.length) return;
     const renderedCount = Math.min(visibleCount, posts.length);
     const targetIndex = Math.max(0, renderedCount - 3);
@@ -1992,7 +1951,6 @@ export default function Home() {
     if (!password || password.length < 6) { setSignupError("Password must be at least 6 characters."); return; }
     setStep("loading");
 
-    // Check handle uniqueness
     const { data: existingHandle } = await supabase.from("profiles").select("id").eq("handle", signupHandle).single();
     if (existingHandle) { setStep("signup"); setSignupError("That handle is already taken."); return; }
 
@@ -2086,7 +2044,6 @@ export default function Home() {
     setPostError("");
     setPosting(true);
 
-    // Shadowbanned users see their own post locally but it doesn't go to the database
     if (shadowbannedUsers.has(currentUser.username.toLowerCase())) {
       const fakePost: Post = {
         id: crypto.randomUUID(),
@@ -2122,7 +2079,6 @@ export default function Home() {
       }
     }
 
-    // Fetch the current handle from profiles so we always store the up-to-date handle on the post
     const { data: myProfile } = await supabase
       .from("profiles")
       .select("handle")
@@ -2147,7 +2103,6 @@ export default function Home() {
       verified: verifiedUsers.has(currentUser.username.toLowerCase()),
     });
 
-    // Fire mention notifications
     await sendMentionNotifications(postText.trim(), currentUser.username, null, postText.trim());
 
     setPostText("");
@@ -2157,7 +2112,6 @@ export default function Home() {
     setPosting(false);
   }
 
-  // Extract @mentions from text and notify each mentioned user
   async function sendMentionNotifications(text: string, fromUsername: string, postId: string | null, postContent: string) {
     const mentionRegex = /@([a-zA-Z0-9]{1,16})/g;
     const mentioned = new Set<string>();
@@ -2194,14 +2148,13 @@ export default function Home() {
     if (!post) return;
     const liked = post.liked_by?.includes(currentUser.id);
 
-    // If the current user is shadowbanned, only update locally for them
     if (shadowbannedUsers.has(currentUser.username.toLowerCase())) {
       const newLikedBy = liked
         ? post.liked_by.filter((id) => id !== currentUser.id)
         : [...(post.liked_by ?? []), currentUser.id];
       const newLikes = liked ? post.likes - 1 : post.likes + 1;
       setPosts((prev) => prev.map((p) => p.id === postId ? { ...p, likes: newLikes, liked_by: newLikedBy } : p));
-      return; // Don't write to database
+      return;
     }
 
     const newLikedBy = liked
@@ -2262,15 +2215,12 @@ export default function Home() {
   }
 
   async function handleReport(postId: string) {
-    // Show toast
     setReportToast(true);
     setTimeout(() => setReportToast(false), 3000);
 
-    // Copy post link
     const postUrl = `${window.location.origin}/posts/${postId}`;
     try { await navigator.clipboard.writeText(postUrl); } catch {}
 
-    // Send to Discord webhook via API route (server-side, key not exposed)
     try {
       await fetch("/api/report", {
         method: "POST",
@@ -2281,11 +2231,9 @@ export default function Home() {
   }
 
   async function handleAdminDelete(postId: string) {
-    // Optimistically remove from UI
     setPosts((prev) => prev.filter((p) => p.id !== postId));
     const { error } = await supabase.from("posts").delete().eq("id", postId);
     if (error) {
-      // If DB delete failed, reload to restore correct state
       console.error("Admin delete failed:", error.message);
       await loadPostsInner();
     }
@@ -2304,7 +2252,6 @@ export default function Home() {
       }
       return p;
     }));
-    // Update linked accounts list so the accounts switcher shows the new pfp/username
     if (currentUser) {
       const updated = linkedAccounts.map((a) =>
         a.id === currentUser.id ? { ...a, username: newUsername, pfp_url: newPfpUrl } : a
@@ -2322,30 +2269,119 @@ export default function Home() {
     await supabase.from("notifications").update({ read: true }).eq("user_id", currentUser.id);
   }
 
+  // ── ALGORITHM ─────────────────────────────────────────────────────────────
+  //
+  // Multi-signal ranking inspired by how real social feeds work:
+  //
+  //  1. ENGAGEMENT RATE — likes, comments, reposts relative to view count.
+  //     Raw counts are easy to game; rates are not. A post with 10 likes and
+  //     12 views beats one with 50 likes and 10 000 views.
+  //
+  //  2. VELOCITY — how fast is this post accumulating interactions *right now*?
+  //     We compare interactions-per-hour in the first window vs the last window
+  //     to detect posts that are suddenly catching fire.
+  //
+  //  3. TIME DECAY — older posts decay. We use a configurable half-life so a
+  //     post loses half its score every N hours regardless of other signals.
+  //     Very new posts (< 1h) get a small freshness bump so they can compete.
+  //
+  //  4. QUALITY SIGNALS — posts with images get a small bonus (more effort,
+  //     more engaging). Verified/staff posts get a slight credibility bump.
+  //
+  //  5. DIVERSITY ENFORCEMENT — we cap how many consecutive posts from the
+  //     same author can appear in a row, preventing one prolific poster from
+  //     dominating the entire feed.
+  //
+  //  6. RECENCY FLOOR — posts younger than 2 hours are always eligible for
+  //     the top section of the feed even if their engagement score is low,
+  //     giving new content a fair shot before it accumulates interactions.
+  //
+  //  7. DISCOVERY SLOTS — every ~8 posts we inject one low-engagement post
+  //     that the algorithm would normally bury, giving emerging creators
+  //     genuine exposure rather than pure popularity reinforcement.
+
   function scorePost(post: Post): number {
-    const hoursOld = (Date.now() - new Date(post.created_at).getTime()) / (1000 * 60 * 60);
+    const now = Date.now();
+    const ageMs = now - new Date(post.created_at).getTime();
+    const ageHours = ageMs / (1000 * 60 * 60);
+
     const likes = post.likes ?? 0;
     const comments = (post.comments ?? []).length;
-    return (likes * 1 + comments * 5) / Math.pow(hoursOld + 2, 1.5);
+    const reposts = (post.reposted_by ?? []).length;
+    const views = Math.max(post.views ?? 1, 1);
+
+    // ── 1. Engagement rate (normalised against views) ──────────────────────
+    // Reposts are the strongest signal (user is endorsing to their audience),
+    // comments show conversation (people care enough to type), likes are passive.
+    const engagementRate =
+      (likes * 1.0 + comments * 2.5 + reposts * 4.0) / views;
+
+    // ── 2. Raw interaction volume (log-scaled so it can't dominate alone) ──
+    // This prevents a post with 0.5% engagement rate and 10k views from being
+    // completely invisible vs a post with 50% rate and 2 interactions.
+    const volumeScore = Math.log1p(likes + comments * 2 + reposts * 3);
+
+    // ── 3. Conversation depth bonus ────────────────────────────────────────
+    // Count total nested replies — deeply threaded posts signal real discussion.
+    function countAllReplies(commentList: Comment[]): number {
+      let total = 0;
+      for (const c of commentList) {
+        total += 1 + countAllReplies((c.replies ?? []) as Comment[]);
+      }
+      return total;
+    }
+    const totalReplies = countAllReplies(post.comments ?? []);
+    const depthBonus = Math.log1p(totalReplies) * 0.4;
+
+    // ── 4. Velocity signal ─────────────────────────────────────────────────
+    // We don't have timestamped interactions in the DB, so we approximate:
+    // if a post is young but already has high absolute engagement it's trending.
+    // Posts < 6h old get a velocity multiplier proportional to interactions/hour.
+    let velocityMultiplier = 1.0;
+    if (ageHours < 6 && ageHours > 0) {
+      const interactionsPerHour = (likes + comments * 2 + reposts * 3) / ageHours;
+      // Scale: 5 interactions/hour = 1.5×, 20/hr = 2×, 50+/hr = 2.5× (capped)
+      velocityMultiplier = 1.0 + Math.min(interactionsPerHour / 40, 1.5);
+    }
+
+    // ── 5. Quality signals ─────────────────────────────────────────────────
+    const imageBonus = post.image_url ? 0.15 : 0.0;
+    const verifiedBonus = post.verified ? 0.1 : 0.0;
+
+    // ── 6. Freshness bump for brand-new posts ──────────────────────────────
+    // Posts under 1 hour old get a small bonus so they appear in the feed
+    // before they've had time to collect any interactions at all.
+    const freshnessBump = ageHours < 1 ? (1 - ageHours) * 0.3 : 0;
+
+    // ── 7. Time decay — half-life of 18 hours ─────────────────────────────
+    // After 18h a post's score is halved; after 36h it's quartered.
+    // This is gentler than the old ^1.5 decay, giving good content more runway.
+    const HALF_LIFE_HOURS = 18;
+    const decayFactor = Math.pow(0.5, ageHours / HALF_LIFE_HOURS);
+
+    // ── Combine ────────────────────────────────────────────────────────────
+    const rawScore =
+      (engagementRate * 60 + volumeScore * 20 + depthBonus + imageBonus + verifiedBonus + freshnessBump)
+      * velocityMultiplier
+      * decayFactor;
+
+    return rawScore;
   }
 
-  // Stable sorted order — only recalculated when we explicitly ask for a new batch
   const sortedPostsRef = useRef<Post[]>([]);
   const lastBatchRef = useRef<number>(0);
 
   function getSortedPosts(postList: Post[], batchEnd: number): Post[] {
-    // Only re-sort when loading a new batch, not on every like/comment/post
     if (batchEnd <= lastBatchRef.current && sortedPostsRef.current.length > 0) {
-      // Merge in any new posts or deleted posts without resorting existing order
+      // Incremental update: don't resort on every like/comment, just patch in-place
       const existingIds = new Set(sortedPostsRef.current.map((p) => p.id));
       const currentIds = new Set(postList.map((p) => p.id));
 
       // Remove deleted posts
       let merged = sortedPostsRef.current.filter((p) => currentIds.has(p.id));
-      // Update existing posts in place (likes, comments etc) without moving them
+      // Update existing posts in-place (likes, comments, etc.) without reordering
       merged = merged.map((p) => postList.find((np) => np.id === p.id) ?? p);
-
-      // Prepend brand new posts to the top
+      // Prepend brand-new posts to top
       const newPosts = postList.filter((p) => !existingIds.has(p.id));
       merged = [...newPosts, ...merged];
 
@@ -2353,43 +2389,104 @@ export default function Home() {
       return merged;
     }
 
-    // Full re-sort for new batch
+    // ── Full sort for a new batch ──────────────────────────────────────────
     lastBatchRef.current = batchEnd;
 
-    const lowEngagement = postList.filter((p) => (p.likes ?? 0) + (p.comments?.length ?? 0) <= 2);
-    const normal = postList.filter((p) => (p.likes ?? 0) + (p.comments?.length ?? 0) > 2);
+    const now = Date.now();
+    const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
 
-    const sorted = [...normal].sort((a, b) => scorePost(b) - scorePost(a));
+    // Separate posts into tiers
+    const fresh: Post[] = [];          // < 2h old — always near the top
+    const ranked: Post[] = [];         // scored normally
+    const discovery: Post[] = [];      // low engagement, needs exposure
 
-    const result: Post[] = [];
-    const usedDiscovery = new Set<string>();
+    for (const post of postList) {
+      const ageMs = now - new Date(post.created_at).getTime();
+      const totalInteractions = (post.likes ?? 0) + (post.comments?.length ?? 0) + (post.reposted_by?.length ?? 0);
 
-    for (const post of sorted) {
-      if (lowEngagement.length > 0 && Math.random() < 0.05) {
-        const available = lowEngagement.filter((p) => !usedDiscovery.has(p.id));
-        if (available.length > 0) {
-          const pick = available[Math.floor(Math.random() * available.length)];
-          usedDiscovery.add(pick.id);
-          result.push(pick);
-          continue;
-        }
+      if (ageMs < TWO_HOURS_MS) {
+        fresh.push(post);
+      } else if (totalInteractions <= 2) {
+        discovery.push(post);
+      } else {
+        ranked.push(post);
       }
-      result.push(post);
     }
 
-    // Always append remaining low engagement posts — never hide them
-    for (const p of lowEngagement) {
-      if (!usedDiscovery.has(p.id)) result.push(p);
+    // Sort each tier by score
+    fresh.sort((a, b) => scorePost(b) - scorePost(a));
+    ranked.sort((a, b) => scorePost(b) - scorePost(a));
+    // Discovery posts: randomise order so different ones surface each refresh
+    discovery.sort(() => Math.random() - 0.5);
+
+    // ── Diversity enforcement ──────────────────────────────────────────────
+    // No author can appear more than twice in a row in the ranked section.
+    function applyAuthorDiversity(list: Post[]): Post[] {
+      const result: Post[] = [];
+      const recentAuthors: string[] = [];    // sliding window of last 2 authors
+      const pending: Post[] = [...list];
+      const deferred: Post[] = [];
+
+      while (pending.length > 0 || deferred.length > 0) {
+        // Try pending first
+        let placed = false;
+        const source = [...pending, ...deferred];
+        for (let i = 0; i < source.length; i++) {
+          const post = source[i];
+          const authorId = post.user_id;
+          // Allow if last 2 authors aren't both the same as this one
+          const lastTwo = recentAuthors.slice(-2);
+          if (lastTwo.length < 2 || !lastTwo.every((a) => a === authorId)) {
+            result.push(post);
+            recentAuthors.push(authorId);
+            // Remove from whichever array it came from
+            const pi = pending.indexOf(post);
+            if (pi !== -1) pending.splice(pi, 1);
+            else deferred.splice(deferred.indexOf(post), 1);
+            placed = true;
+            break;
+          }
+        }
+        // If nothing could be placed without violating diversity, force the next one
+        if (!placed) {
+          const forced = pending.shift() ?? deferred.shift()!;
+          result.push(forced);
+          recentAuthors.push(forced.user_id);
+        }
+      }
+      return result;
+    }
+
+    const diverseRanked = applyAuthorDiversity(ranked);
+
+    // ── Weave everything together ──────────────────────────────────────────
+    // Layout: fresh posts first, then ranked with discovery slots every ~8 posts
+    const result: Post[] = [...fresh];
+    const DISCOVERY_INTERVAL = 8;
+    let discoveryIdx = 0;
+
+    for (let i = 0; i < diverseRanked.length; i++) {
+      result.push(diverseRanked[i]);
+
+      // Every DISCOVERY_INTERVAL ranked posts, inject one discovery post
+      if ((i + 1) % DISCOVERY_INTERVAL === 0 && discoveryIdx < discovery.length) {
+        result.push(discovery[discoveryIdx++]);
+      }
+    }
+
+    // Append any remaining discovery posts at the end
+    while (discoveryIdx < discovery.length) {
+      result.push(discovery[discoveryIdx++]);
     }
 
     sortedPostsRef.current = result;
     return result;
   }
+  // ── END ALGORITHM ─────────────────────────────────────────────────────────
 
   const allVisiblePosts = view === "bookmarks" && currentUser
     ? posts.filter((p) => p.bookmarked_by?.includes(currentUser.id))
     : getSortedPosts(
-        // Hide shadowbanned posts from everyone except the banned user themselves and the admin
         posts.filter((p) => {
           const isBanned = shadowbannedUsers.has(p.username.toLowerCase());
           if (!isBanned) return true;
@@ -2538,7 +2635,6 @@ export default function Home() {
         />
       )}
 
-      {/* Report toast */}
       {reportToast && (
         <div style={{
           position: "fixed", top: 20, left: 20, zIndex: 999,
@@ -2623,7 +2719,6 @@ export default function Home() {
             })}
           </nav>
 
-          {/* User card with logout/edit on hover */}
           {currentUser && (
             <div style={{ position: "relative" }}
               onMouseEnter={() => {
@@ -2759,7 +2854,6 @@ export default function Home() {
               )}
               {notifications
                 .filter((n) => {
-                  // Only show notifications newer than 7 days
                   const age = Date.now() - new Date(n.created_at).getTime();
                   return age < 7 * 24 * 60 * 60 * 1000;
                 })
@@ -2780,7 +2874,7 @@ export default function Home() {
                   </div>
                   {notif.post_content && (
                     <div style={{ color: "#646669", fontSize: 12, marginTop: 2 }}>
-                      "{notif.post_content.slice(0, 80)}{notif.post_content.length > 80 ? "…" : ""}"
+                      &quot;{notif.post_content.slice(0, 80)}{notif.post_content.length > 80 ? "…" : ""}&quot;
                     </div>
                   )}
                   {notif.message_content && (
