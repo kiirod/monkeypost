@@ -17,7 +17,6 @@ function getTwemojiUrl(emoji: string): string {
   return `https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/${cp}.svg`;
 }
 
-// Renders text with emoji images, blue clickable links, blue @mentions, and blue #tags
 function renderWithTwemoji(text: string, onMentionClick?: (username: string) => void): React.ReactNode[] {
   const tokenRegex = /(https?:\/\/[^\s]+|(?<!\w)(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+(?:com|net|org|io|dev|app|co|gg|tv|me|uk|us|ca|au)[^\s]*|(?<![a-zA-Z0-9])@[a-zA-Z0-9]{1,16}|(?<![a-zA-Z0-9])#[a-zA-Z0-9_]{1,32})/g;
   const emojiRegex = /(\p{Emoji_Presentation}|\p{Extended_Pictographic})/gu;
@@ -286,7 +285,6 @@ const ViewsIcon = () => (
   </svg>
 );
 
-
 const BanIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width={16} height={16}>
     <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2"/>
@@ -294,12 +292,42 @@ const BanIcon = () => (
   </svg>
 );
 
-
 const OwnerBadge = () => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#e2b714" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width={16} height={16} style={{ display: "inline-block", verticalAlign: "middle", marginLeft: 4 }}>
     <path d="M12 3a3.6 3.6 0 00-3.05 1.68 3.6 3.6 0 00-.9-.1 3.6 3.6 0 00-2.42 1.06 3.6 3.6 0 00-.94 3.32A3.6 3.6 0 003 12a3.6 3.6 0 001.69 3.05 3.6 3.6 0 00.95 3.32 3.6 3.6 0 003.35.96A3.6 3.6 0 0012 21a3.6 3.6 0 003.04-1.67 3.6 3.6 0 004.3-4.3A3.6 3.6 0 0021 12a3.6 3.6 0 00-1.67-3.04v0a3.6 3.6 0 00-4.3-4.3A3.6 3.6 0 0012 3z" />
     <path d="M15 10l-4 4" />
     <path d="M9 12l2 2" />
+  </svg>
+);
+
+const HelperBadge = () => (
+  <svg fill="#e2b714" viewBox="0 0 1920 1920" xmlns="http://www.w3.org/2000/svg"
+    width={14} height={14} style={{ display: "inline-block", verticalAlign: "middle", marginLeft: 3 }}>
+    <path d="M1556.611 1920c-54.084 0-108.168-20.692-149.333-61.857L740.095 1190.96c-198.162 41.712-406.725-19.269-550.475-163.019C14.449 852.771-35.256 582.788 65.796 356.27l32.406-72.696 390.194 390.193c24.414 24.305 64.266 24.305 88.68 0l110.687-110.686c11.824-11.934 18.283-27.59 18.283-44.34 0-16.751-6.46-32.516-18.283-44.34L297.569 84.207 370.265 51.8C596.893-49.252 866.875.453 1041.937 175.515c155.026 155.136 212.833 385.157 151.851 594.815l650.651 650.651c39.961 39.852 61.967 92.95 61.967 149.443 0 56.383-22.006 109.482-61.967 149.334l-138.275 138.385c-41.275 41.165-95.36 61.857-149.553 61.857Z"
+      fillRule="evenodd"/>
+  </svg>
+);
+
+const SupporterBadge = () => (
+  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"
+    width={15} height={15} style={{ display: "inline-block", verticalAlign: "middle", marginLeft: 3 }}>
+    <path d="M15.7 4C18.87 4 21 6.98 21 9.76C21 15.39 12.16 20 12 20C11.84 20 3 15.39 3 9.76C3 6.98 5.13 4 8.3 4C10.12 4 11.31 4.91 12 5.71C12.69 4.91 13.88 4 15.7 4Z"
+      stroke="#e2b714" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+);
+
+const CoolKidsBadge = () => (
+  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"
+    width={15} height={15} style={{ display: "inline-block", verticalAlign: "middle", marginLeft: 3 }}>
+    <path d="M9 14C9.18131 14.4723 9.47841 14.8915 9.864 15.219C11.0903 16.2483 12.8748 16.2613 14.116 15.25C14.5069 14.9283 14.8109 14.5136 15 14.044"
+      stroke="#e2b714" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+    <path fillRule="evenodd" clipRule="evenodd"
+      d="M19 12C19 15.866 15.866 19 12 19C8.13401 19 5 15.866 5 12C5 8.13401 8.13401 5 12 5C13.8565 5 15.637 5.7375 16.9497 7.05025C18.2625 8.36301 19 10.1435 19 12Z"
+      stroke="#e2b714" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M8.99985 10.0002L9.9997 11L8.99985 11.9998"
+      stroke="#e2b714" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M15.0001 10.0001L14.0003 11L15.0001 11.9998"
+      stroke="#e2b714" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
   </svg>
 );
 
@@ -316,6 +344,32 @@ const RefreshIcon = ({ spinning }: { spinning?: boolean }) => (
       stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 );
+
+// ── UserBadges helper — renders all applicable badges stacked ─────────────────
+
+function UserBadges({
+  username,
+  verifiedUsers,
+  helperUsers,
+  supporterUsers,
+  coolKidsUsers,
+}: {
+  username: string;
+  verifiedUsers: Set<string>;
+  helperUsers: Set<string>;
+  supporterUsers: Set<string>;
+  coolKidsUsers: Set<string>;
+}) {
+  const lower = username.toLowerCase();
+  return (
+    <>
+      {verifiedUsers.has(lower)  && <OwnerBadge />}
+      {helperUsers.has(lower)    && <HelperBadge />}
+      {supporterUsers.has(lower) && <SupporterBadge />}
+      {coolKidsUsers.has(lower)  && <CoolKidsBadge />}
+    </>
+  );
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -354,6 +408,9 @@ interface Post {
   edited?: boolean;
   views?: number;
   verified?: boolean;
+  helper?: boolean;
+  supporter?: boolean;
+  cool_kids?: boolean;
 }
 
 interface Profile {
@@ -450,6 +507,9 @@ function ReplyItem({
   isShadowbannedUser,
   onAdminShadowban,
   verifiedUsers,
+  helperUsers,
+  supporterUsers,
+  coolKidsUsers,
 }: {
   reply: Reply;
   depth: number;
@@ -462,6 +522,9 @@ function ReplyItem({
   isShadowbannedUser: (username: string) => boolean;
   onAdminShadowban: (username: string) => void;
   verifiedUsers: Set<string>;
+  helperUsers: Set<string>;
+  supporterUsers: Set<string>;
+  coolKidsUsers: Set<string>;
 }) {
   const [showReplyInput, setShowReplyInput] = useState(false);
   const [replyText, setReplyText] = useState("");
@@ -557,7 +620,8 @@ function ReplyItem({
         <div style={{ flex: 1 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 2 }}>
             <span style={{ color: "#e2b714", fontSize: fontSize - 1, fontWeight: 700 }}>@{reply.username}</span>
-            {verifiedUsers.has(reply.username.toLowerCase()) && <OwnerBadge />}
+            <UserBadges username={reply.username} verifiedUsers={verifiedUsers}
+              helperUsers={helperUsers} supporterUsers={supporterUsers} coolKidsUsers={coolKidsUsers} />
             {replyIsShadowbanned && isAdmin && (
               <span style={{ color: "#ca4754", fontSize: 10, background: "#ca475422", borderRadius: 4, padding: "1px 6px" }}>shadowbanned</span>
             )}
@@ -615,7 +679,9 @@ function ReplyItem({
           {(reply.replies ?? []).map((r, i) => (
             <ReplyItem key={r.id} reply={r} depth={depth + 1} currentUser={currentUser}
               postId={postId} commentId={commentId} replyPath={[...replyPath, i]} onUpdate={onUpdate}
-              isAdmin={isAdmin} isShadowbannedUser={isShadowbannedUser} onAdminShadowban={onAdminShadowban} verifiedUsers={verifiedUsers} />
+              isAdmin={isAdmin} isShadowbannedUser={isShadowbannedUser} onAdminShadowban={onAdminShadowban}
+              verifiedUsers={verifiedUsers} helperUsers={helperUsers}
+              supporterUsers={supporterUsers} coolKidsUsers={coolKidsUsers} />
           ))}
         </div>
       </div>
@@ -623,7 +689,7 @@ function ReplyItem({
   );
 }
 
-// ── Report Button ────────────────────────────────────────────────────────────────
+// ── Report Button ─────────────────────────────────────────────────────────────
 
 function ReportButton({ postId, onReport }: { postId: string; onReport: (id: string) => void }) {
   const [hovered, setHovered] = useState(false);
@@ -659,6 +725,9 @@ function PostCard({
   onRepost,
   blockedUsers,
   verifiedUsers,
+  helperUsers,
+  supporterUsers,
+  coolKidsUsers,
   onReport,
 }: {
   post: Post;
@@ -674,6 +743,9 @@ function PostCard({
   onRepost: (id: string) => void;
   blockedUsers: Set<string>;
   verifiedUsers: Set<string>;
+  helperUsers: Set<string>;
+  supporterUsers: Set<string>;
+  coolKidsUsers: Set<string>;
   onReport: (id: string) => void;
 }) {
   const [showComments, setShowComments] = useState(false);
@@ -791,7 +863,8 @@ function PostCard({
         <div style={{ flex: 1, minWidth: 0, cursor: "pointer" }} onClick={(e) => { if ((e.target as HTMLElement).closest("a,button,input,textarea")) return; window.location.href = `/posts/${post.id}`; }}>
           <div style={{ marginBottom: 4, display: "flex", alignItems: "center", gap: 4 }}>
             <span style={{ color: "#e2b714", fontWeight: 700, fontSize: 14 }}>@{post.username}</span>
-            {post.verified && <OwnerBadge />}
+            <UserBadges username={post.username} verifiedUsers={verifiedUsers}
+              helperUsers={helperUsers} supporterUsers={supporterUsers} coolKidsUsers={coolKidsUsers} />
             {post.handle && post.handle !== post.username.toLowerCase() && (
               <span style={{ color: "#646669", fontSize: 12 }}>@{post.handle}</span>
             )}
@@ -942,7 +1015,8 @@ function PostCard({
                     <div style={{ flex: 1 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 2 }}>
                         <span style={{ color: "#e2b714", fontSize: 12, fontWeight: 700 }}>@{c.username}</span>
-                        {verifiedUsers.has(c.username.toLowerCase()) && <OwnerBadge />}
+                        <UserBadges username={c.username} verifiedUsers={verifiedUsers}
+                          helperUsers={helperUsers} supporterUsers={supporterUsers} coolKidsUsers={coolKidsUsers} />
                         {isAdmin && c.username.toLowerCase() !== ADMIN_USER && (
                           <div style={{ display: "flex", gap: 4, marginLeft: 4 }}>
                             <button onClick={async () => {
@@ -973,7 +1047,9 @@ function PostCard({
                       {(c.replies ?? []).map((r, ri) => (
                         <ReplyItem key={r.id} reply={r} depth={1} currentUser={currentUser}
                           postId={post.id} commentId={c.id} replyPath={[ri]} onUpdate={handleCommentsUpdate}
-                          isAdmin={isAdmin} isShadowbannedUser={(u) => isShadowbanned} onAdminShadowban={onAdminShadowban} verifiedUsers={verifiedUsers} />
+                          isAdmin={isAdmin} isShadowbannedUser={() => isShadowbanned} onAdminShadowban={onAdminShadowban}
+                          verifiedUsers={verifiedUsers} helperUsers={helperUsers}
+                          supporterUsers={supporterUsers} coolKidsUsers={coolKidsUsers} />
                       ))}
                     </div>
                   </div>
@@ -1789,7 +1865,10 @@ export default function Home() {
   }
 
   const [shadowbannedUsers, setShadowbannedUsers] = useState<Set<string>>(new Set());
-  const [verifiedUsers, setVerifiedUsers] = useState<Set<string>>(new Set());
+  const [verifiedUsers,    setVerifiedUsers]    = useState<Set<string>>(new Set());
+  const [helperUsers,      setHelperUsers]      = useState<Set<string>>(new Set());
+  const [supporterUsers,   setSupporterUsers]   = useState<Set<string>>(new Set());
+  const [coolKidsUsers,    setCoolKidsUsers]    = useState<Set<string>>(new Set());
 
   async function loadShadowbannedUsers() {
     const { data } = await supabase.from("profiles").select("username").eq("shadowbanned", true);
@@ -1799,6 +1878,21 @@ export default function Home() {
   async function loadVerifiedUsers() {
     const { data } = await supabase.from("profiles").select("username").eq("verified", true);
     if (data) setVerifiedUsers(new Set(data.map((p: { username: string }) => p.username.toLowerCase())));
+  }
+
+  async function loadHelperUsers() {
+    const { data } = await supabase.from("profiles").select("username").eq("helper", true);
+    if (data) setHelperUsers(new Set(data.map((p: { username: string }) => p.username.toLowerCase())));
+  }
+
+  async function loadSupporterUsers() {
+    const { data } = await supabase.from("profiles").select("username").eq("supporter", true);
+    if (data) setSupporterUsers(new Set(data.map((p: { username: string }) => p.username.toLowerCase())));
+  }
+
+  async function loadCoolKidsUsers() {
+    const { data } = await supabase.from("profiles").select("username").eq("cool_kids", true);
+    if (data) setCoolKidsUsers(new Set(data.map((p: { username: string }) => p.username.toLowerCase())));
   }
 
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -1814,7 +1908,7 @@ export default function Home() {
   const pfpInputRef = useRef<HTMLInputElement>(null);
   const postImageRef = useRef<HTMLInputElement>(null);
 
-  // ── Realtime subscriptions ──────────────────────────────────────────────────
+  // ── Realtime subscriptions ────────────────────────────────────────────────
   const currentUserRef = useRef(currentUser);
   useEffect(() => { currentUserRef.current = currentUser; }, [currentUser]);
 
@@ -1876,6 +1970,9 @@ export default function Home() {
           await loadNotifications(session.user.id);
           await loadShadowbannedUsers();
           await loadVerifiedUsers();
+          await loadHelperUsers();
+          await loadSupporterUsers();
+          await loadCoolKidsUsers();
           await loadBlockedUsers(session.user.id);
           setStep("app");
           return;
@@ -1911,7 +2008,14 @@ export default function Home() {
     sortedPostsRef.current = [];
     lastBatchRef.current = 0;
     setVisibleCount(PAGE_SIZE);
-    await Promise.all([loadPostsInner(), loadShadowbannedUsers(), loadVerifiedUsers()]);
+    await Promise.all([
+      loadPostsInner(),
+      loadShadowbannedUsers(),
+      loadVerifiedUsers(),
+      loadHelperUsers(),
+      loadSupporterUsers(),
+      loadCoolKidsUsers(),
+    ]);
     setRefreshing(false);
   }
 
@@ -1996,6 +2100,9 @@ export default function Home() {
     await loadNotifications(authData.user.id);
     await loadShadowbannedUsers();
     await loadVerifiedUsers();
+    await loadHelperUsers();
+    await loadSupporterUsers();
+    await loadCoolKidsUsers();
     await loadBlockedUsers(authData.user.id);
     setStep("app");
   }
@@ -2101,6 +2208,9 @@ export default function Home() {
       edited: false,
       views: 0,
       verified: verifiedUsers.has(currentUser.username.toLowerCase()),
+      helper: helperUsers.has(currentUser.username.toLowerCase()),
+      supporter: supporterUsers.has(currentUser.username.toLowerCase()),
+      cool_kids: coolKidsUsers.has(currentUser.username.toLowerCase()),
     });
 
     await sendMentionNotifications(postText.trim(), currentUser.username, null, postText.trim());
@@ -2269,36 +2379,7 @@ export default function Home() {
     await supabase.from("notifications").update({ read: true }).eq("user_id", currentUser.id);
   }
 
-  // ── ALGORITHM ─────────────────────────────────────────────────────────────
-  //
-  // Multi-signal ranking inspired by how real social feeds work:
-  //
-  //  1. ENGAGEMENT RATE — likes, comments, reposts relative to view count.
-  //     Raw counts are easy to game; rates are not. A post with 10 likes and
-  //     12 views beats one with 50 likes and 10 000 views.
-  //
-  //  2. VELOCITY — how fast is this post accumulating interactions *right now*?
-  //     We compare interactions-per-hour in the first window vs the last window
-  //     to detect posts that are suddenly catching fire.
-  //
-  //  3. TIME DECAY — older posts decay. We use a configurable half-life so a
-  //     post loses half its score every N hours regardless of other signals.
-  //     Very new posts (< 1h) get a small freshness bump so they can compete.
-  //
-  //  4. QUALITY SIGNALS — posts with images get a small bonus (more effort,
-  //     more engaging). Verified/staff posts get a slight credibility bump.
-  //
-  //  5. DIVERSITY ENFORCEMENT — we cap how many consecutive posts from the
-  //     same author can appear in a row, preventing one prolific poster from
-  //     dominating the entire feed.
-  //
-  //  6. RECENCY FLOOR — posts younger than 2 hours are always eligible for
-  //     the top section of the feed even if their engagement score is low,
-  //     giving new content a fair shot before it accumulates interactions.
-  //
-  //  7. DISCOVERY SLOTS — every ~8 posts we inject one low-engagement post
-  //     that the algorithm would normally bury, giving emerging creators
-  //     genuine exposure rather than pure popularity reinforcement.
+  // ── ALGORITHM ──────────────────────────────────────────────────────────────
 
   function scorePost(post: Post): number {
     const now = Date.now();
@@ -2310,19 +2391,11 @@ export default function Home() {
     const reposts = (post.reposted_by ?? []).length;
     const views = Math.max(post.views ?? 1, 1);
 
-    // ── 1. Engagement rate (normalised against views) ──────────────────────
-    // Reposts are the strongest signal (user is endorsing to their audience),
-    // comments show conversation (people care enough to type), likes are passive.
     const engagementRate =
       (likes * 1.0 + comments * 2.5 + reposts * 4.0) / views;
 
-    // ── 2. Raw interaction volume (log-scaled so it can't dominate alone) ──
-    // This prevents a post with 0.5% engagement rate and 10k views from being
-    // completely invisible vs a post with 50% rate and 2 interactions.
     const volumeScore = Math.log1p(likes + comments * 2 + reposts * 3);
 
-    // ── 3. Conversation depth bonus ────────────────────────────────────────
-    // Count total nested replies — deeply threaded posts signal real discussion.
     function countAllReplies(commentList: Comment[]): number {
       let total = 0;
       for (const c of commentList) {
@@ -2333,33 +2406,19 @@ export default function Home() {
     const totalReplies = countAllReplies(post.comments ?? []);
     const depthBonus = Math.log1p(totalReplies) * 0.4;
 
-    // ── 4. Velocity signal ─────────────────────────────────────────────────
-    // We don't have timestamped interactions in the DB, so we approximate:
-    // if a post is young but already has high absolute engagement it's trending.
-    // Posts < 6h old get a velocity multiplier proportional to interactions/hour.
     let velocityMultiplier = 1.0;
     if (ageHours < 6 && ageHours > 0) {
       const interactionsPerHour = (likes + comments * 2 + reposts * 3) / ageHours;
-      // Scale: 5 interactions/hour = 1.5×, 20/hr = 2×, 50+/hr = 2.5× (capped)
       velocityMultiplier = 1.0 + Math.min(interactionsPerHour / 40, 1.5);
     }
 
-    // ── 5. Quality signals ─────────────────────────────────────────────────
     const imageBonus = post.image_url ? 0.15 : 0.0;
     const verifiedBonus = post.verified ? 0.1 : 0.0;
-
-    // ── 6. Freshness bump for brand-new posts ──────────────────────────────
-    // Posts under 1 hour old get a small bonus so they appear in the feed
-    // before they've had time to collect any interactions at all.
     const freshnessBump = ageHours < 1 ? (1 - ageHours) * 0.3 : 0;
 
-    // ── 7. Time decay — half-life of 18 hours ─────────────────────────────
-    // After 18h a post's score is halved; after 36h it's quartered.
-    // This is gentler than the old ^1.5 decay, giving good content more runway.
     const HALF_LIFE_HOURS = 18;
     const decayFactor = Math.pow(0.5, ageHours / HALF_LIFE_HOURS);
 
-    // ── Combine ────────────────────────────────────────────────────────────
     const rawScore =
       (engagementRate * 60 + volumeScore * 20 + depthBonus + imageBonus + verifiedBonus + freshnessBump)
       * velocityMultiplier
@@ -2373,15 +2432,11 @@ export default function Home() {
 
   function getSortedPosts(postList: Post[], batchEnd: number): Post[] {
     if (batchEnd <= lastBatchRef.current && sortedPostsRef.current.length > 0) {
-      // Incremental update: don't resort on every like/comment, just patch in-place
       const existingIds = new Set(sortedPostsRef.current.map((p) => p.id));
       const currentIds = new Set(postList.map((p) => p.id));
 
-      // Remove deleted posts
       let merged = sortedPostsRef.current.filter((p) => currentIds.has(p.id));
-      // Update existing posts in-place (likes, comments, etc.) without reordering
       merged = merged.map((p) => postList.find((np) => np.id === p.id) ?? p);
-      // Prepend brand-new posts to top
       const newPosts = postList.filter((p) => !existingIds.has(p.id));
       merged = [...newPosts, ...merged];
 
@@ -2389,16 +2444,14 @@ export default function Home() {
       return merged;
     }
 
-    // ── Full sort for a new batch ──────────────────────────────────────────
     lastBatchRef.current = batchEnd;
 
     const now = Date.now();
     const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
 
-    // Separate posts into tiers
-    const fresh: Post[] = [];          // < 2h old — always near the top
-    const ranked: Post[] = [];         // scored normally
-    const discovery: Post[] = [];      // low engagement, needs exposure
+    const fresh: Post[] = [];
+    const ranked: Post[] = [];
+    const discovery: Post[] = [];
 
     for (const post of postList) {
       const ageMs = now - new Date(post.created_at).getTime();
@@ -2413,33 +2466,26 @@ export default function Home() {
       }
     }
 
-    // Sort each tier by score
     fresh.sort((a, b) => scorePost(b) - scorePost(a));
     ranked.sort((a, b) => scorePost(b) - scorePost(a));
-    // Discovery posts: randomise order so different ones surface each refresh
     discovery.sort(() => Math.random() - 0.5);
 
-    // ── Diversity enforcement ──────────────────────────────────────────────
-    // No author can appear more than twice in a row in the ranked section.
     function applyAuthorDiversity(list: Post[]): Post[] {
       const result: Post[] = [];
-      const recentAuthors: string[] = [];    // sliding window of last 2 authors
+      const recentAuthors: string[] = [];
       const pending: Post[] = [...list];
       const deferred: Post[] = [];
 
       while (pending.length > 0 || deferred.length > 0) {
-        // Try pending first
         let placed = false;
         const source = [...pending, ...deferred];
         for (let i = 0; i < source.length; i++) {
           const post = source[i];
           const authorId = post.user_id;
-          // Allow if last 2 authors aren't both the same as this one
           const lastTwo = recentAuthors.slice(-2);
           if (lastTwo.length < 2 || !lastTwo.every((a) => a === authorId)) {
             result.push(post);
             recentAuthors.push(authorId);
-            // Remove from whichever array it came from
             const pi = pending.indexOf(post);
             if (pi !== -1) pending.splice(pi, 1);
             else deferred.splice(deferred.indexOf(post), 1);
@@ -2447,7 +2493,6 @@ export default function Home() {
             break;
           }
         }
-        // If nothing could be placed without violating diversity, force the next one
         if (!placed) {
           const forced = pending.shift() ?? deferred.shift()!;
           result.push(forced);
@@ -2459,22 +2504,17 @@ export default function Home() {
 
     const diverseRanked = applyAuthorDiversity(ranked);
 
-    // ── Weave everything together ──────────────────────────────────────────
-    // Layout: fresh posts first, then ranked with discovery slots every ~8 posts
     const result: Post[] = [...fresh];
     const DISCOVERY_INTERVAL = 8;
     let discoveryIdx = 0;
 
     for (let i = 0; i < diverseRanked.length; i++) {
       result.push(diverseRanked[i]);
-
-      // Every DISCOVERY_INTERVAL ranked posts, inject one discovery post
       if ((i + 1) % DISCOVERY_INTERVAL === 0 && discoveryIdx < discovery.length) {
         result.push(discovery[discoveryIdx++]);
       }
     }
 
-    // Append any remaining discovery posts at the end
     while (discoveryIdx < discovery.length) {
       result.push(discovery[discoveryIdx++]);
     }
@@ -2482,7 +2522,6 @@ export default function Home() {
     sortedPostsRef.current = result;
     return result;
   }
-  // ── END ALGORITHM ─────────────────────────────────────────────────────────
 
   const allVisiblePosts = view === "bookmarks" && currentUser
     ? posts.filter((p) => p.bookmarked_by?.includes(currentUser.id))
@@ -2903,11 +2942,19 @@ export default function Home() {
               )}
               {visiblePosts.map((post, index) => (
                 <div key={post.id} ref={(el) => { postRefs.current[index] = el; }}>
-                  <PostCard post={post} currentUser={currentUser}
-                    onLike={handleLike} onBookmark={handleBookmark} onDelete={handleDelete} onEdit={handleEdit}
+                  <PostCard
+                    post={post}
+                    currentUser={currentUser}
+                    onLike={handleLike}
+                    onBookmark={handleBookmark}
+                    onDelete={handleDelete}
+                    onEdit={handleEdit}
                     onRepost={handleRepost}
                     blockedUsers={blockedUsers}
                     verifiedUsers={verifiedUsers}
+                    helperUsers={helperUsers}
+                    supporterUsers={supporterUsers}
+                    coolKidsUsers={coolKidsUsers}
                     onReport={handleReport}
                     isAdmin={currentUser?.username.toLowerCase() === ADMIN_USER}
                     isShadowbanned={shadowbannedUsers.has(post.username.toLowerCase())}
