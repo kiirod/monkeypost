@@ -21,6 +21,11 @@
       "permanent": true
     },
     {
+      "source": "/users/monkeychat",
+      "destination": "https://chat.mtgoals.cc/monkeychat",
+      "permanent": true
+    },
+    {
       "source": "/dev",
       "destination": "https://home.mtgoals.cc",
       "permanent": true
