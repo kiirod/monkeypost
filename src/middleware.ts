@@ -25,7 +25,7 @@ export function middleware(request: NextRequest) {
     `default-src 'self'`,
     `script-src 'self' 'unsafe-inline'`,
     `style-src 'self' 'unsafe-inline'`,
-`img-src 'self' data: blob: https://*.supabase.co`,
+`img-src 'self' data: blob: https://*.supabase.co https://cdn.jsdelivr.net`,
 `connect-src 'self' https://*.supabase.co wss://*.supabase.co`,
 `font-src 'self' https://*.supabase.co`,
     `object-src 'none'`,
