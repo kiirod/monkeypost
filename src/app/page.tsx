@@ -127,32 +127,25 @@ function removeSpacingBypass(text: string): string {
 
 async function containsBlockedWord(text: string): Promise<boolean> {
   const blocked = await getBlockedWords();
-
   const stripped = text
     .replace(/https?:\/\/[^\s]+/g, "")
     .replace(/(?<!\w)(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+(?:com|net|org|io|dev|app|co|gg|tv|me|uk|us|ca|au)[^\s]*/g, "")
     .replace(/@[a-zA-Z0-9]{1,16}/g, "");
-
   const processed = normalizeText(collapseRepeats(removeSpacingBypass(stripped)));
   const words = processed.split(/\s+/);
-
   for (const blockedWord of blocked) {
     const normalizedBlocked = normalizeText(blockedWord);
-
     for (const word of words) {
       if (word === normalizedBlocked) return true;
     }
-
     if (normalizedBlocked.includes(" ")) {
       const escaped = normalizedBlocked.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       if (new RegExp(`\\b${escaped}\\b`).test(processed)) return true;
     }
-
     if (normalizedBlocked.length >= 6) {
       if (processed.includes(normalizedBlocked)) return true;
     }
   }
-
   return false;
 }
 
@@ -345,14 +338,10 @@ const RefreshIcon = ({ spinning }: { spinning?: boolean }) => (
   </svg>
 );
 
-// ── UserBadges helper — renders all applicable badges stacked ─────────────────
+// ── UserBadges helper ─────────────────────────────────────────────────────────
 
 function UserBadges({
-  username,
-  verifiedUsers,
-  helperUsers,
-  supporterUsers,
-  coolKidsUsers,
+  username, verifiedUsers, helperUsers, supporterUsers, coolKidsUsers,
 }: {
   username: string;
   verifiedUsers: Set<string>;
@@ -371,11 +360,64 @@ function UserBadges({
   );
 }
 
+// ── Skeleton Components ───────────────────────────────────────────────────────
+
+const SkeletonBlock = ({ width, height, borderRadius = 6, style = {} }: {
+  width?: string | number;
+  height?: string | number;
+  borderRadius?: number;
+  style?: React.CSSProperties;
+}) => (
+  <div style={{
+    width: width ?? "100%",
+    height: height ?? 16,
+    borderRadius,
+    background: "linear-gradient(90deg, #2c2e31 25%, #3a3d42 50%, #2c2e31 75%)",
+    backgroundSize: "200% 100%",
+    animation: "shimmer 1.6s infinite",
+    flexShrink: 0,
+    ...style,
+  }} />
+);
+
+function SkeletonPost() {
+  return (
+    <div style={{ background: "#2c2e31", borderRadius: 12, padding: "16px 20px", marginBottom: 12, border: "1px solid #3a3d42" }}>
+      <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+        <SkeletonBlock width={40} height={40} borderRadius={20} />
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <SkeletonBlock width={100} height={14} />
+            <SkeletonBlock width={70} height={12} />
+          </div>
+          <SkeletonBlock width="90%" height={14} />
+          <SkeletonBlock width="75%" height={14} />
+          <div style={{ display: "flex", gap: 20, marginTop: 4 }}>
+            <SkeletonBlock width={40} height={12} />
+            <SkeletonBlock width={40} height={12} />
+            <SkeletonBlock width={40} height={12} />
+            <SkeletonBlock width={40} height={12} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SkeletonFeed() {
+  return (
+    <div>
+      {[1, 2, 3, 4, 5].map((i) => <SkeletonPost key={i} />)}
+    </div>
+  );
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface Reply {
   id: string;
   username: string;
+  display_name?: string;
   pfp_url: string | null;
   content: string;
   created_at: string;
@@ -385,6 +427,7 @@ interface Reply {
 interface Comment {
   id: string;
   username: string;
+  display_name?: string;
   pfp_url: string | null;
   content: string;
   created_at: string;
@@ -395,6 +438,7 @@ interface Post {
   id: string;
   user_id: string;
   username: string;
+  display_name?: string;
   handle?: string;
   pfp_url: string | null;
   content: string;
@@ -411,14 +455,6 @@ interface Post {
   helper?: boolean;
   supporter?: boolean;
   cool_kids?: boolean;
-}
-
-interface Profile {
-  id: string;
-  username: string;
-  handle: string;
-  display_name: string;
-  pfp_url: string | null;
 }
 
 interface Notification {
@@ -455,7 +491,6 @@ function Avatar({ url, username, size = 36 }: { url: string | null; username: st
 
 function HoverableImage({ src, alt, style }: { src: string; alt: string; style?: React.CSSProperties }) {
   const [hovered, setHovered] = useState(false);
-
   async function handleDownload() {
     try {
       const res = await fetch(src);
@@ -470,21 +505,16 @@ function HoverableImage({ src, alt, style }: { src: string; alt: string; style?:
       window.open(src, "_blank");
     }
   }
-
   return (
     <div style={{ position: "relative", display: "inline-block", width: "100%" }}
       onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
       <img src={src} alt={alt} style={style} />
       {hovered && (
-        <button onClick={handleDownload}
-          title="Download image"
+        <button onClick={handleDownload} title="Download image"
           style={{
-            position: "absolute", top: 8, left: 8,
-            background: "#323437cc",
-            border: "none", borderRadius: 6,
-            width: 34, height: 34, cursor: "pointer",
+            position: "absolute", top: 8, left: 8, background: "#323437cc",
+            border: "none", borderRadius: 6, width: 34, height: 34, cursor: "pointer",
             display: "flex", alignItems: "center", justifyContent: "center",
-            transition: "background 0.15s",
           }}>
           <DownloadIcon />
         </button>
@@ -496,35 +526,19 @@ function HoverableImage({ src, alt, style }: { src: string; alt: string; style?:
 // ── Reply Tree ────────────────────────────────────────────────────────────────
 
 function ReplyItem({
-  reply,
-  depth,
-  currentUser,
-  postId,
-  commentId,
-  replyPath,
-  onUpdate,
-  isAdmin,
-  isShadowbannedUser,
-  onAdminShadowban,
-  verifiedUsers,
-  helperUsers,
-  supporterUsers,
-  coolKidsUsers,
+  reply, depth, currentUser, postId, commentId, replyPath, onUpdate,
+  isAdmin, isShadowbannedUser, onAdminShadowban,
+  verifiedUsers, helperUsers, supporterUsers, coolKidsUsers,
 }: {
-  reply: Reply;
-  depth: number;
-  currentUser: { id: string; username: string; pfp_url: string | null } | null;
-  postId: string;
-  commentId: string;
-  replyPath: number[];
+  reply: Reply; depth: number;
+  currentUser: { id: string; username: string; display_name?: string; pfp_url: string | null } | null;
+  postId: string; commentId: string; replyPath: number[];
   onUpdate: (updatedComments: Comment[]) => void;
   isAdmin: boolean;
   isShadowbannedUser: (username: string) => boolean;
   onAdminShadowban: (username: string) => void;
-  verifiedUsers: Set<string>;
-  helperUsers: Set<string>;
-  supporterUsers: Set<string>;
-  coolKidsUsers: Set<string>;
+  verifiedUsers: Set<string>; helperUsers: Set<string>;
+  supporterUsers: Set<string>; coolKidsUsers: Set<string>;
 }) {
   const [showReplyInput, setShowReplyInput] = useState(false);
   const [replyText, setReplyText] = useState("");
@@ -552,35 +566,27 @@ function ReplyItem({
     const blocked = await containsBlockedWord(replyText);
     if (blocked) { setReplyError("Your message has a word that is disallowed."); return; }
     setReplyError("");
-
     const newReply: Reply = {
       id: crypto.randomUUID(),
       username: currentUser.username,
+      display_name: currentUser.display_name,
       pfp_url: currentUser.pfp_url,
       content: replyText.trim(),
       created_at: new Date().toISOString(),
       replies: [],
     };
-
     const { data: postData } = await supabase.from("posts").select("comments").eq("id", postId).single();
     if (!postData) return;
     const comments: Comment[] = postData.comments ?? [];
-
     function insertReply(list: Reply[], path: number[]): Reply[] {
       if (path.length === 0) return [...list, newReply];
       return list.map((r, i) =>
-        i === path[0]
-          ? { ...r, replies: insertReply(r.replies ?? [], path.slice(1)) }
-          : r
+        i === path[0] ? { ...r, replies: insertReply(r.replies ?? [], path.slice(1)) } : r
       );
     }
-
     const updated = comments.map((c) =>
-      c.id === commentId
-        ? { ...c, replies: insertReply(c.replies ?? [], replyPath) }
-        : c
+      c.id === commentId ? { ...c, replies: insertReply(c.replies ?? [], replyPath) } : c
     );
-
     await supabase.from("posts").update({ comments: updated }).eq("id", postId);
     onUpdate(updated);
     setReplyText("");
@@ -592,34 +598,31 @@ function ReplyItem({
     const { data: postData } = await supabase.from("posts").select("comments").eq("id", postId).single();
     if (!postData) return;
     const comments: Comment[] = postData.comments ?? [];
-
     function removeReply(list: Reply[], path: number[]): Reply[] {
       if (path.length === 1) return list.filter((_, i) => i !== path[0]);
       return list.map((r, i) =>
         i === path[0] ? { ...r, replies: removeReply(r.replies ?? [], path.slice(1)) } : r
       );
     }
-
     const updated = comments.map((c) =>
-      c.id === commentId
-        ? { ...c, replies: removeReply(c.replies ?? [], replyPath) }
-        : c
+      c.id === commentId ? { ...c, replies: removeReply(c.replies ?? [], replyPath) } : c
     );
-
     await supabase.from("posts").update({ comments: updated }).eq("id", postId);
     onUpdate(updated);
   }
 
   const fontSize = depth >= 2 ? 12 : 13;
   const avatarSize = depth >= 2 ? 20 : 24;
+  const displayName = reply.display_name || reply.username;
 
   return (
     <div style={{ marginLeft: depth > 0 ? 16 : 0, marginTop: 6 }}>
       <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
         <Avatar url={reply.pfp_url} username={reply.username} size={avatarSize} />
         <div style={{ flex: 1 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 2 }}>
-            <span style={{ color: "#e2b714", fontSize: fontSize - 1, fontWeight: 700 }}>@{reply.username}</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 2, flexWrap: "wrap" }}>
+            <span style={{ color: "#e2b714", fontSize: fontSize - 1, fontWeight: 700 }}>{displayName}</span>
+            <span style={{ color: "#646669", fontSize: fontSize - 2, opacity: 0.7 }}>@{reply.username}</span>
             <UserBadges username={reply.username} verifiedUsers={verifiedUsers}
               helperUsers={helperUsers} supporterUsers={supporterUsers} coolKidsUsers={coolKidsUsers} />
             {replyIsShadowbanned && isAdmin && (
@@ -663,15 +666,9 @@ function ReplyItem({
                 <input value={replyText} onChange={(e) => setReplyText(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && submitNestedReply()}
                   placeholder="Reply..." maxLength={180}
-                  style={{
-                    flex: 1, background: "#3a3d42", border: "none", borderRadius: 6,
-                    padding: "6px 10px", color: "#fff", fontSize: 12, fontFamily: "inherit", outline: "none",
-                  }} />
+                  style={{ flex: 1, background: "#3a3d42", border: "none", borderRadius: 6, padding: "6px 10px", color: "#fff", fontSize: 12, fontFamily: "inherit", outline: "none" }} />
                 <button onClick={submitNestedReply}
-                  style={{
-                    background: "#e2b714", border: "none", borderRadius: 6,
-                    padding: "6px 10px", color: "#323437", fontWeight: 700, fontSize: 12, cursor: "pointer", fontFamily: "inherit",
-                  }}>↵</button>
+                  style={{ background: "#e2b714", border: "none", borderRadius: 6, padding: "6px 10px", color: "#323437", fontWeight: 700, fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>↵</button>
               </div>
               {replyError && <div style={{ color: "#ca4754", fontSize: 11, marginTop: 4 }}>{replyError}</div>}
             </div>
@@ -694,16 +691,10 @@ function ReplyItem({
 function ReportButton({ postId, onReport }: { postId: string; onReport: (id: string) => void }) {
   const [hovered, setHovered] = useState(false);
   return (
-    <button
-      onClick={(e) => { e.stopPropagation(); onReport(postId); }}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+    <button onClick={(e) => { e.stopPropagation(); onReport(postId); }}
+      onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
       title="Report post"
-      style={{
-        display: "flex", alignItems: "center", background: "none", border: "none",
-        cursor: "pointer", color: hovered ? "#ca4754" : "#646669",
-        padding: 0, transition: "color 0.15s",
-      }}>
+      style={{ display: "flex", alignItems: "center", background: "none", border: "none", cursor: "pointer", color: hovered ? "#ca4754" : "#646669", padding: 0, transition: "color 0.15s" }}>
       <FlagIcon />
     </button>
   );
@@ -712,26 +703,12 @@ function ReportButton({ postId, onReport }: { postId: string; onReport: (id: str
 // ── Post Card ─────────────────────────────────────────────────────────────────
 
 function PostCard({
-  post,
-  currentUser,
-  onLike,
-  onBookmark,
-  onDelete,
-  onEdit,
-  isAdmin,
-  isShadowbanned,
-  onAdminDelete,
-  onAdminShadowban,
-  onRepost,
-  blockedUsers,
-  verifiedUsers,
-  helperUsers,
-  supporterUsers,
-  coolKidsUsers,
-  onReport,
+  post, currentUser, onLike, onBookmark, onDelete, onEdit,
+  isAdmin, isShadowbanned, onAdminDelete, onAdminShadowban, onRepost,
+  blockedUsers, verifiedUsers, helperUsers, supporterUsers, coolKidsUsers, onReport,
 }: {
   post: Post;
-  currentUser: { id: string; username: string; pfp_url: string | null } | null;
+  currentUser: { id: string; username: string; display_name?: string; pfp_url: string | null } | null;
   onLike: (id: string) => void;
   onBookmark: (id: string) => void;
   onDelete: (id: string) => void;
@@ -769,13 +746,16 @@ function PostCard({
 
   const reposted = currentUser ? (post.reposted_by ?? []).includes(currentUser.id) : false;
   const isBlocked = blockedUsers.has(post.user_id);
-
   if (isBlocked) return null;
 
   const liked = currentUser ? post.liked_by?.includes(currentUser.id) : false;
   const bookmarked = currentUser ? post.bookmarked_by?.includes(currentUser.id) : false;
   const isOwner = currentUser?.id === post.user_id;
   const canEdit = isOwner && !post.edited;
+
+  // Display name vs handle
+  const displayName = post.display_name || post.username;
+  const handle = post.handle || post.username.toLowerCase();
 
   async function submitComment() {
     if (!commentText.trim() || !currentUser) return;
@@ -785,6 +765,7 @@ function PostCard({
     const newComment: Comment = {
       id: crypto.randomUUID(),
       username: currentUser.username,
+      display_name: currentUser.display_name,
       pfp_url: currentUser.pfp_url,
       content: commentText.trim(),
       created_at: new Date().toISOString(),
@@ -794,20 +775,13 @@ function PostCard({
     setLocalComments(updatedComments);
     setCommentText("");
     await supabase.from("posts").update({ comments: updatedComments }).eq("id", post.id);
-
     if (post.user_id !== currentUser.id) {
       await supabase.from("notifications").insert({
-        user_id: post.user_id,
-        type: "comment",
-        from_username: currentUser.username,
-        post_id: post.id,
-        post_content: post.content,
-        message_content: commentText.trim(),
-        read: false,
-        created_at: new Date().toISOString(),
+        user_id: post.user_id, type: "comment", from_username: currentUser.username,
+        post_id: post.id, post_content: post.content, message_content: commentText.trim(),
+        read: false, created_at: new Date().toISOString(),
       });
     }
-
     const mentionRegex = /@([a-zA-Z0-9]{1,16})/g;
     const mentioned = new Set<string>();
     let mm;
@@ -820,14 +794,9 @@ function PostCard({
       if (profiles) {
         for (const profile of profiles) {
           await supabase.from("notifications").insert({
-            user_id: profile.id,
-            type: "mention",
-            from_username: currentUser.username,
-            post_id: post.id,
-            post_content: post.content,
-            message_content: commentText.trim(),
-            read: false,
-            created_at: new Date().toISOString(),
+            user_id: profile.id, type: "mention", from_username: currentUser.username,
+            post_id: post.id, post_content: post.content, message_content: commentText.trim(),
+            read: false, created_at: new Date().toISOString(),
           });
         }
       }
@@ -857,22 +826,23 @@ function PostCard({
   return (
     <div style={{ background: "#2c2e31", borderRadius: 12, padding: "16px 20px", marginBottom: 12, border: "1px solid #3a3d42" }}>
       <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-        <a href={`/users/${post.handle ?? post.username.toLowerCase()}`} onClick={(e) => e.stopPropagation()} style={{ textDecoration: "none", flexShrink: 0 }}>
+        <a href={`/users/${handle}`} onClick={(e) => e.stopPropagation()} style={{ textDecoration: "none", flexShrink: 0 }}>
           <Avatar url={post.pfp_url} username={post.username} size={40} />
         </a>
-        <div style={{ flex: 1, minWidth: 0, cursor: "pointer" }} onClick={(e) => { if ((e.target as HTMLElement).closest("a,button,input,textarea")) return; window.location.href = `/posts/${post.id}`; }}>
-          <div style={{ marginBottom: 4, display: "flex", alignItems: "center", gap: 4 }}>
-            <span style={{ color: "#e2b714", fontWeight: 700, fontSize: 14 }}>@{post.username}</span>
+        <div style={{ flex: 1, minWidth: 0, cursor: "pointer" }}
+          onClick={(e) => { if ((e.target as HTMLElement).closest("a,button,input,textarea")) return; window.location.href = `/posts/${post.id}`; }}>
+
+          {/* Display name + handle row */}
+          <div style={{ marginBottom: 4, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+            <span style={{ color: "#e2b714", fontWeight: 700, fontSize: 14 }}>{displayName}</span>
+            <span style={{ color: "#646669", fontSize: 12, opacity: 0.7 }}>@{handle}</span>
             <UserBadges username={post.username} verifiedUsers={verifiedUsers}
               helperUsers={helperUsers} supporterUsers={supporterUsers} coolKidsUsers={coolKidsUsers} />
-            {post.handle && post.handle !== post.username.toLowerCase() && (
-              <span style={{ color: "#646669", fontSize: 12 }}>@{post.handle}</span>
-            )}
             {isShadowbanned && isAdmin && (
-              <span style={{ color: "#ca4754", fontSize: 10, background: "#ca475422", borderRadius: 4, padding: "1px 6px", marginLeft: 4 }}>shadowbanned</span>
+              <span style={{ color: "#ca4754", fontSize: 10, background: "#ca475422", borderRadius: 4, padding: "1px 6px" }}>shadowbanned</span>
             )}
             {isAdmin && post.username.toLowerCase() !== ADMIN_USER && (
-              <div style={{ display: "flex", gap: 4, marginLeft: 6 }}>
+              <div style={{ display: "flex", gap: 4, marginLeft: 2 }}>
                 <button onClick={(e) => { e.stopPropagation(); onAdminDelete(post.id); }} title="Admin delete post"
                   style={{ background: "none", border: "none", cursor: "pointer", color: "#ca4754", padding: 0, display: "flex", opacity: 0.7 }}>
                   <TrashIcon />
@@ -886,6 +856,7 @@ function PostCard({
               </div>
             )}
           </div>
+
           {post.verified && (
             <div style={{ color: "#e2b714", opacity: 0.5, fontSize: 11, marginTop: -2, marginBottom: 4 }}>Staff</div>
           )}
@@ -894,31 +865,19 @@ function PostCard({
             <div>
               <textarea value={editText} onChange={(e) => setEditText(e.target.value.slice(0, 180))}
                 rows={3} maxLength={180}
-                style={{
-                  width: "100%", background: "#3a3d42", border: "1px solid #646669",
-                  borderRadius: 8, color: "#d1d0c5", fontSize: 15, fontFamily: "inherit",
-                  resize: "none", outline: "none", lineHeight: 1.5, padding: "8px 12px", boxSizing: "border-box",
-                }} />
+                style={{ width: "100%", background: "#3a3d42", border: "1px solid #646669", borderRadius: 8, color: "#d1d0c5", fontSize: 15, fontFamily: "inherit", resize: "none", outline: "none", lineHeight: 1.5, padding: "8px 12px", boxSizing: "border-box" }} />
               {editError && <div style={{ color: "#ca4754", fontSize: 12, marginTop: 4 }}>{editError}</div>}
               <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
                 <button onClick={submitEdit}
-                  style={{
-                    background: "#e2b714", border: "none", borderRadius: 6, padding: "6px 14px",
-                    color: "#323437", fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit",
-                  }}>Save</button>
+                  style={{ background: "#e2b714", border: "none", borderRadius: 6, padding: "6px 14px", color: "#323437", fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>Save</button>
                 <button onClick={() => { setEditing(false); setEditText(post.content); setEditError(""); }}
-                  style={{
-                    background: "#3a3d42", border: "none", borderRadius: 6, padding: "6px 14px",
-                    color: "#d1d0c5", fontSize: 13, cursor: "pointer", fontFamily: "inherit",
-                  }}>Cancel</button>
+                  style={{ background: "#3a3d42", border: "none", borderRadius: 6, padding: "6px 14px", color: "#d1d0c5", fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>Cancel</button>
               </div>
             </div>
           ) : (
             <div style={{ fontSize: 15, lineHeight: 1.5, wordBreak: "break-word", color: "#d1d0c5" }}>
               {renderWithTwemoji(post.content)}
-              {post.edited && (
-                <span style={{ opacity: 0.5, fontSize: 12, marginLeft: 6 }}>(edited)</span>
-              )}
+              {post.edited && <span style={{ opacity: 0.5, fontSize: 12, marginLeft: 6 }}>(edited)</span>}
             </div>
           )}
 
@@ -932,73 +891,43 @@ function PostCard({
           {/* Actions */}
           <div style={{ display: "flex", gap: 20, marginTop: 12, alignItems: "center" }}>
             <button onClick={(e) => { e.stopPropagation(); onLike(post.id); }}
-              style={{
-                display: "flex", alignItems: "center", gap: 6, background: "none", border: "none",
-                cursor: "pointer", color: liked ? "#e2b714" : "#646669", fontSize: 13, padding: 0, transition: "color 0.15s",
-              }}>
+              style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", cursor: "pointer", color: liked ? "#e2b714" : "#646669", fontSize: 13, padding: 0, transition: "color 0.15s" }}>
               <HeartIcon filled={liked} />
               <span>{isShadowbanned && currentUser?.id === post.user_id ? post.likes : isShadowbanned ? (post.liked_by?.filter(id => id !== currentUser?.id).length ?? 0) : (post.likes ?? 0)}</span>
             </button>
-
             <button onClick={(e) => { e.stopPropagation(); onRepost(post.id); }}
-              style={{
-                display: "flex", alignItems: "center", gap: 6, background: "none", border: "none",
-                cursor: "pointer", color: reposted ? "#22c55e" : "#646669", fontSize: 13, padding: 0, transition: "color 0.15s",
-              }}>
+              style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", cursor: "pointer", color: reposted ? "#22c55e" : "#646669", fontSize: 13, padding: 0, transition: "color 0.15s" }}>
               <RepostIcon active={reposted} />
               <span>{(post.reposted_by ?? []).length}</span>
             </button>
-
             <button onClick={(e) => { e.stopPropagation(); onBookmark(post.id); }}
-              style={{
-                display: "flex", alignItems: "center", gap: 6, background: "none", border: "none",
-                cursor: "pointer", color: bookmarked ? "#e2b714" : "#646669", padding: 0, transition: "color 0.15s",
-              }}>
+              style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", cursor: "pointer", color: bookmarked ? "#e2b714" : "#646669", padding: 0, transition: "color 0.15s" }}>
               <BookmarkIcon filled={bookmarked} />
             </button>
-
             <button onClick={(e) => { e.stopPropagation(); setShowComments((v) => !v); }}
-              style={{
-                display: "flex", alignItems: "center", gap: 6, background: "none", border: "none",
-                cursor: "pointer", color: "#646669", padding: 0, transition: "color 0.15s",
-              }}>
+              style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", cursor: "pointer", color: "#646669", padding: 0, transition: "color 0.15s" }}>
               <CommentIcon />
               <span style={{ fontSize: 13 }}>{localComments.length}</span>
             </button>
-
             <div style={{ display: "flex", alignItems: "center", gap: 4, color: "#646669", fontSize: 13 }}>
               <ViewsIcon />
               <span>{post.views ?? 0}</span>
             </div>
-
-            {!isOwner && (
-              <ReportButton postId={post.id} onReport={onReport} />
-            )}
-
+            {!isOwner && <ReportButton postId={post.id} onReport={onReport} />}
             {isOwner && (
               <div style={{ display: "flex", gap: 8, marginLeft: "auto", alignItems: "center" }}>
                 {canEdit && (
                   <button onClick={() => setEditing(true)}
-                    onMouseEnter={() => setEditHovered(true)}
-                    onMouseLeave={() => setEditHovered(false)}
+                    onMouseEnter={() => setEditHovered(true)} onMouseLeave={() => setEditHovered(false)}
                     title="Edit post (once only)"
-                    style={{
-                      display: "flex", alignItems: "center", background: "none", border: "none",
-                      cursor: "pointer", color: editHovered ? "#e2b714" : "#646669",
-                      padding: 0, transition: "color 0.15s",
-                    }}>
+                    style={{ display: "flex", alignItems: "center", background: "none", border: "none", cursor: "pointer", color: editHovered ? "#e2b714" : "#646669", padding: 0, transition: "color 0.15s" }}>
                     <EditIcon />
                   </button>
                 )}
                 <button onClick={() => onDelete(post.id)}
-                  onMouseEnter={() => setDeleteHovered(true)}
-                  onMouseLeave={() => setDeleteHovered(false)}
+                  onMouseEnter={() => setDeleteHovered(true)} onMouseLeave={() => setDeleteHovered(false)}
                   title="Delete post"
-                  style={{
-                    display: "flex", alignItems: "center", background: "none", border: "none",
-                    cursor: "pointer", color: deleteHovered ? "#ca4754" : "#646669",
-                    padding: 0, transition: "color 0.15s",
-                  }}>
+                  style={{ display: "flex", alignItems: "center", background: "none", border: "none", cursor: "pointer", color: deleteHovered ? "#ca4754" : "#646669", padding: 0, transition: "color 0.15s" }}>
                   <TrashIcon />
                 </button>
               </div>
@@ -1008,70 +937,67 @@ function PostCard({
           {/* Comments */}
           {showComments && (
             <div style={{ marginTop: 12 }}>
-              {localComments.map((c, ci) => (
-                <div key={c.id} style={{ marginBottom: 10 }}>
-                  <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-                    <Avatar url={c.pfp_url} username={c.username} size={26} />
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 2 }}>
-                        <span style={{ color: "#e2b714", fontSize: 12, fontWeight: 700 }}>@{c.username}</span>
-                        <UserBadges username={c.username} verifiedUsers={verifiedUsers}
-                          helperUsers={helperUsers} supporterUsers={supporterUsers} coolKidsUsers={coolKidsUsers} />
-                        {isAdmin && c.username.toLowerCase() !== ADMIN_USER && (
-                          <div style={{ display: "flex", gap: 4, marginLeft: 4 }}>
-                            <button onClick={async () => {
-                              const updated = localComments.filter((lc) => lc.id !== c.id);
-                              setLocalComments(updated);
-                              await supabase.from("posts").update({ comments: updated }).eq("id", post.id);
-                            }} title="Admin delete comment"
-                              style={{ background: "none", border: "none", cursor: "pointer", color: "#ca4754", padding: 0, display: "flex", opacity: 0.7 }}>
-                              <TrashIcon />
+              {localComments.map((c, ci) => {
+                const commentDisplay = c.display_name || c.username;
+                return (
+                  <div key={c.id} style={{ marginBottom: 10 }}>
+                    <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                      <Avatar url={c.pfp_url} username={c.username} size={26} />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 2, flexWrap: "wrap" }}>
+                          <span style={{ color: "#e2b714", fontSize: 12, fontWeight: 700 }}>{commentDisplay}</span>
+                          <span style={{ color: "#646669", fontSize: 11, opacity: 0.7 }}>@{c.username}</span>
+                          <UserBadges username={c.username} verifiedUsers={verifiedUsers}
+                            helperUsers={helperUsers} supporterUsers={supporterUsers} coolKidsUsers={coolKidsUsers} />
+                          {isAdmin && c.username.toLowerCase() !== ADMIN_USER && (
+                            <div style={{ display: "flex", gap: 4, marginLeft: 4 }}>
+                              <button onClick={async () => {
+                                const updated = localComments.filter((lc) => lc.id !== c.id);
+                                setLocalComments(updated);
+                                await supabase.from("posts").update({ comments: updated }).eq("id", post.id);
+                              }} title="Admin delete comment"
+                                style={{ background: "none", border: "none", cursor: "pointer", color: "#ca4754", padding: 0, display: "flex", opacity: 0.7 }}>
+                                <TrashIcon />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                        <div style={{ color: "#d1d0c5", fontSize: 13, lineHeight: 1.4, wordBreak: "break-word", marginBottom: 3 }}>
+                          {renderWithTwemoji(c.content)}
+                        </div>
+                        <div style={{ display: "flex", gap: 10, marginTop: 3 }}>
+                          {currentUser && (
+                            <CommentReplyButton postId={post.id} commentId={c.id} commentIndex={ci}
+                              currentUser={currentUser} localComments={localComments} onUpdate={handleCommentsUpdate} />
+                          )}
+                          {currentUser?.username === c.username && (
+                            <button onClick={() => deleteComment(c.id, c.username)}
+                              style={{ background: "none", border: "none", color: "#646669", fontSize: 11, cursor: "pointer", padding: 0 }}>
+                              delete
                             </button>
-                          </div>
-                        )}
+                          )}
+                        </div>
+                        {(c.replies ?? []).map((r, ri) => (
+                          <ReplyItem key={r.id} reply={r} depth={1} currentUser={currentUser}
+                            postId={post.id} commentId={c.id} replyPath={[ri]} onUpdate={handleCommentsUpdate}
+                            isAdmin={isAdmin} isShadowbannedUser={() => isShadowbanned} onAdminShadowban={onAdminShadowban}
+                            verifiedUsers={verifiedUsers} helperUsers={helperUsers}
+                            supporterUsers={supporterUsers} coolKidsUsers={coolKidsUsers} />
+                        ))}
                       </div>
-                      <div style={{ color: "#d1d0c5", fontSize: 13, lineHeight: 1.4, wordBreak: "break-word", marginBottom: 3 }}>{renderWithTwemoji(c.content)}</div>
-                      <div style={{ display: "flex", gap: 10, marginTop: 3 }}>
-                        {currentUser && (
-                          <CommentReplyButton postId={post.id} commentId={c.id} commentIndex={ci}
-                            currentUser={currentUser} localComments={localComments}
-                            onUpdate={handleCommentsUpdate} />
-                        )}
-                        {currentUser?.username === c.username && (
-                          <button onClick={() => deleteComment(c.id, c.username)}
-                            style={{ background: "none", border: "none", color: "#646669", fontSize: 11, cursor: "pointer", padding: 0 }}>
-                            delete
-                          </button>
-                        )}
-                      </div>
-                      {(c.replies ?? []).map((r, ri) => (
-                        <ReplyItem key={r.id} reply={r} depth={1} currentUser={currentUser}
-                          postId={post.id} commentId={c.id} replyPath={[ri]} onUpdate={handleCommentsUpdate}
-                          isAdmin={isAdmin} isShadowbannedUser={() => isShadowbanned} onAdminShadowban={onAdminShadowban}
-                          verifiedUsers={verifiedUsers} helperUsers={helperUsers}
-                          supporterUsers={supporterUsers} coolKidsUsers={coolKidsUsers} />
-                      ))}
                     </div>
                   </div>
-                </div>
-              ))}
-
+                );
+              })}
               {currentUser && (
                 <div style={{ marginTop: 8 }}>
                   <div style={{ display: "flex", gap: 8 }}>
                     <input value={commentText} onChange={(e) => setCommentText(e.target.value)}
                       onKeyDown={(e) => e.key === "Enter" && submitComment()}
                       placeholder="Write a reply..." maxLength={180}
-                      style={{
-                        flex: 1, background: "#3a3d42", border: "none", borderRadius: 8,
-                        padding: "8px 12px", color: "#fff", fontSize: 13, fontFamily: "inherit", outline: "none",
-                      }} />
+                      style={{ flex: 1, background: "#3a3d42", border: "none", borderRadius: 8, padding: "8px 12px", color: "#fff", fontSize: 13, fontFamily: "inherit", outline: "none" }} />
                     <button onClick={submitComment}
-                      style={{
-                        background: "#e2b714", border: "none", borderRadius: 8,
-                        padding: "8px 14px", color: "#323437", fontWeight: 700, fontSize: 13,
-                        cursor: "pointer", fontFamily: "inherit",
-                      }}>Reply</button>
+                      style={{ background: "#e2b714", border: "none", borderRadius: 8, padding: "8px 14px", color: "#323437", fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>Reply</button>
                   </div>
                   {commentError && <div style={{ color: "#ca4754", fontSize: 12, marginTop: 4 }}>{commentError}</div>}
                 </div>
@@ -1090,7 +1016,7 @@ function CommentReplyButton({
   postId, commentId, commentIndex, currentUser, localComments, onUpdate,
 }: {
   postId: string; commentId: string; commentIndex: number;
-  currentUser: { id: string; username: string; pfp_url: string | null };
+  currentUser: { id: string; username: string; display_name?: string; pfp_url: string | null };
   localComments: Comment[];
   onUpdate: (updated: Comment[]) => void;
 }) {
@@ -1106,6 +1032,7 @@ function CommentReplyButton({
     const newReply: Reply = {
       id: crypto.randomUUID(),
       username: currentUser.username,
+      display_name: currentUser.display_name,
       pfp_url: currentUser.pfp_url,
       content: text.trim(),
       created_at: new Date().toISOString(),
@@ -1132,16 +1059,9 @@ function CommentReplyButton({
             <input value={text} onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && submit()}
               placeholder="Reply..." maxLength={180}
-              style={{
-                flex: 1, background: "#3a3d42", border: "none", borderRadius: 6,
-                padding: "6px 10px", color: "#fff", fontSize: 12, fontFamily: "inherit", outline: "none",
-              }} />
+              style={{ flex: 1, background: "#3a3d42", border: "none", borderRadius: 6, padding: "6px 10px", color: "#fff", fontSize: 12, fontFamily: "inherit", outline: "none" }} />
             <button onClick={submit}
-              style={{
-                background: "#e2b714", border: "none", borderRadius: 6,
-                padding: "6px 10px", color: "#323437", fontWeight: 700, fontSize: 12,
-                cursor: "pointer", fontFamily: "inherit",
-              }}>↵</button>
+              style={{ background: "#e2b714", border: "none", borderRadius: 6, padding: "6px 10px", color: "#323437", fontWeight: 700, fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>↵</button>
           </div>
           {error && <div style={{ color: "#ca4754", fontSize: 11, marginTop: 4 }}>{error}</div>}
         </div>
@@ -1153,15 +1073,13 @@ function CommentReplyButton({
 // ── Edit Profile Modal ────────────────────────────────────────────────────────
 
 function EditProfileModal({
-  currentUser,
-  onClose,
-  onSave,
+  currentUser, onClose, onSave,
 }: {
-  currentUser: { id: string; username: string; pfp_url: string | null };
+  currentUser: { id: string; username: string; display_name?: string; pfp_url: string | null };
   onClose: () => void;
-  onSave: (newUsername: string, newPfpUrl: string | null, newHandle: string) => void;
+  onSave: (newUsername: string, newPfpUrl: string | null, newHandle: string, newDisplayName: string) => void;
 }) {
-  const [newUsername, setNewUsername] = useState(currentUser.username);
+  const [newDisplayName, setNewDisplayName] = useState(currentUser.display_name || currentUser.username);
   const [newHandle, setNewHandle] = useState("");
   const [pfpFile, setPfpFile] = useState<File | null>(null);
   const [pfpPreview, setPfpPreview] = useState<string | null>(currentUser.pfp_url);
@@ -1169,7 +1087,6 @@ function EditProfileModal({
   const [saving, setSaving] = useState(false);
   const [usernameLastChanged, setUsernameLastChanged] = useState<string | null>(null);
   const pfpRef = useRef<HTMLInputElement>(null);
-
   const [originalHandle, setOriginalHandle] = useState("");
   const [bio, setBio] = useState("");
   const [bannerFile, setBannerFile] = useState<File | null>(null);
@@ -1181,35 +1098,27 @@ function EditProfileModal({
 
   useEffect(() => {
     async function fetchProfile() {
-      const { data } = await supabase
-        .from("profiles")
-        .select("username_last_changed, handle, bio, banner_url, banner_position")
-        .eq("id", currentUser.id)
-        .single();
+      const { data } = await supabase.from("profiles")
+        .select("username_last_changed, handle, bio, banner_url, banner_position, display_name")
+        .eq("id", currentUser.id).single();
       if (data?.username_last_changed) setUsernameLastChanged(data.username_last_changed);
-      if (data?.handle) {
-        setNewHandle(data.handle);
-        setOriginalHandle(data.handle);
-      }
+      if (data?.handle) { setNewHandle(data.handle); setOriginalHandle(data.handle); }
       if (data?.bio) setBio(data.bio);
       if (data?.banner_url) setBannerPreview(data.banner_url);
       if (data?.banner_position !== null && data?.banner_position !== undefined) setBannerPosition(data.banner_position);
+      if (data?.display_name) setNewDisplayName(data.display_name);
     }
     fetchProfile();
   }, [currentUser.id]);
 
-  const canChangeUsername = (() => {
+  const canChangeHandle = (() => {
     if (!usernameLastChanged) return true;
-    const last = new Date(usernameLastChanged).getTime();
-    const now = Date.now();
-    return now - last >= 30 * 24 * 60 * 60 * 1000;
+    return Date.now() - new Date(usernameLastChanged).getTime() >= 30 * 24 * 60 * 60 * 1000;
   })();
 
-  const daysUntilUsernameChange = (() => {
+  const daysUntilHandleChange = (() => {
     if (!usernameLastChanged) return 0;
-    const last = new Date(usernameLastChanged).getTime();
-    const now = Date.now();
-    const diff = 30 * 24 * 60 * 60 * 1000 - (now - last);
+    const diff = 30 * 24 * 60 * 60 * 1000 - (Date.now() - new Date(usernameLastChanged).getTime());
     return Math.ceil(diff / (24 * 60 * 60 * 1000));
   })();
 
@@ -1222,10 +1131,7 @@ function EditProfileModal({
 
   async function handleSave() {
     setError("");
-    if (!/^[a-z0-9]{1,16}$/i.test(newUsername)) {
-      setError("Username must be 1–16 chars, letters and numbers only.");
-      return;
-    }
+    if (!newDisplayName.trim()) { setError("Display name cannot be empty."); return; }
     setSaving(true);
 
     let pfp_url = currentUser.pfp_url;
@@ -1233,9 +1139,7 @@ function EditProfileModal({
 
     if (bannerFile) {
       const stripped = await stripImageMetadata(bannerFile);
-      const { data: bannerUpload } = await supabase.storage
-        .from("pfps")
-        .upload(`banner_${currentUser.id}.jpg`, stripped, { upsert: true });
+      const { data: bannerUpload } = await supabase.storage.from("pfps").upload(`banner_${currentUser.id}.jpg`, stripped, { upsert: true });
       if (bannerUpload) {
         const { data: bannerUrlData } = supabase.storage.from("pfps").getPublicUrl(bannerUpload.path);
         banner_url = bannerUrlData.publicUrl + `?t=${Date.now()}`;
@@ -1244,124 +1148,55 @@ function EditProfileModal({
 
     if (pfpFile) {
       const stripped = await stripImageMetadata(pfpFile);
-      const { data: uploadData } = await supabase.storage
-        .from("pfps")
-        .upload(`${currentUser.id}.jpg`, stripped, { upsert: true });
+      const { data: uploadData } = await supabase.storage.from("pfps").upload(`${currentUser.id}.jpg`, stripped, { upsert: true });
       if (uploadData) {
         const { data: urlData } = supabase.storage.from("pfps").getPublicUrl(uploadData.path);
         pfp_url = urlData.publicUrl + `?t=${Date.now()}`;
       }
     }
 
-    const usernameChanged = newUsername !== currentUser.username;
-
-    if (usernameChanged && !canChangeUsername) {
-      setError(`You can change your username again in ${daysUntilUsernameChange} day(s).`);
+    const handleChanged = newHandle !== originalHandle;
+    if (handleChanged && !canChangeHandle) {
+      setError(`You can change your handle again in ${daysUntilHandleChange} day(s).`);
       setSaving(false);
       return;
     }
 
-    if (usernameChanged) {
-      const { data: existing } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("username", newUsername)
-        .neq("id", currentUser.id)
-        .single();
-      if (existing) {
-        setError("That username is already taken.");
-        setSaving(false);
-        return;
-      }
-    }
-
-    const handleWasDefault =
-      originalHandle === currentUser.username.toLowerCase() || !originalHandle;
-    const finalHandle = usernameChanged && handleWasDefault
-      ? newUsername.toLowerCase()
-      : (newHandle.trim() || newUsername.toLowerCase());
-
-    const updateData: Record<string, string | null> = { pfp_url };
-    if (usernameChanged) {
-      updateData.username = newUsername;
+    const updateData: Record<string, unknown> = {
+      pfp_url,
+      display_name: newDisplayName.trim(),
+      bio: bio.trim() || null,
+      banner_position: bannerPosition,
+    };
+    if (handleChanged) {
+      updateData.handle = newHandle;
       updateData.username_last_changed = new Date().toISOString();
     }
-    updateData.handle = finalHandle;
-    updateData.bio = bio.trim() || null;
     if (banner_url) updateData.banner_url = banner_url;
-    (updateData as Record<string, unknown>).banner_position = bannerPosition;
 
     await supabase.from("profiles").update(updateData).eq("id", currentUser.id);
 
-    if (usernameChanged) {
-      await supabase.auth.updateUser({
-        email: `${newUsername.toLowerCase()}@monkeypost.local`,
-      });
-    }
-
-    if (usernameChanged || pfpFile) {
-      const { data: verifiedCheck } = await supabase
-        .from("profiles")
-        .select("verified")
-        .eq("id", currentUser.id)
-        .single();
-      const bulkPostUpdate: Record<string, unknown> = {
-        handle: finalHandle,
-        verified: verifiedCheck?.verified ?? false,
-        pfp_url: pfp_url,
-      };
-      if (usernameChanged) bulkPostUpdate.username = newUsername;
-      await supabase.from("posts").update(bulkPostUpdate).eq("user_id", currentUser.id);
-    }
-
-    if (usernameChanged || pfpFile) {
-      const { data: allPosts } = await supabase
-        .from("posts")
-        .select("id, comments")
-        .neq("user_id", currentUser.id);
-
-      if (allPosts) {
-        for (const post of allPosts) {
-          const updatedComments = updateUsernameInComments(
-            post.comments ?? [],
-            currentUser.username,
-            usernameChanged ? newUsername : currentUser.username,
-            pfpFile ? pfp_url : currentUser.pfp_url
-          );
-          const hasChanges = JSON.stringify(updatedComments) !== JSON.stringify(post.comments);
-          if (hasChanges) {
-            await supabase.from("posts").update({ comments: updatedComments }).eq("id", post.id);
-          }
-        }
-      }
+    if (pfpFile) {
+      await supabase.from("posts").update({ pfp_url, display_name: newDisplayName.trim() }).eq("user_id", currentUser.id);
+    } else {
+      await supabase.from("posts").update({ display_name: newDisplayName.trim() }).eq("user_id", currentUser.id);
     }
 
     setSaving(false);
-    onSave(usernameChanged ? newUsername : currentUser.username, pfp_url, finalHandle);
+    onSave(currentUser.username, pfp_url, newHandle || originalHandle, newDisplayName.trim());
   }
 
   return (
-    <div style={{
-      position: "fixed", inset: 0, background: "#000000aa", zIndex: 100,
-      display: "flex", alignItems: "center", justifyContent: "center",
-    }} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={{
-        background: "#2c2e31", borderRadius: 14, padding: "28px 28px",
-        width: "100%", maxWidth: 400, border: "1px solid #3a3d42",
-        display: "flex", flexDirection: "column", gap: 18,
-      }}>
+    <div style={{ position: "fixed", inset: 0, background: "#000000aa", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center" }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={{ background: "#2c2e31", borderRadius: 14, padding: "28px", width: "100%", maxWidth: 400, border: "1px solid #3a3d42", display: "flex", flexDirection: "column", gap: 18, maxHeight: "90vh", overflowY: "auto" }}>
         <h2 style={{ color: "#e2b714", fontSize: 18, fontWeight: 700, margin: 0 }}>Edit Profile</h2>
-
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <Avatar url={pfpPreview} username={newUsername} size={56} />
+          <Avatar url={pfpPreview} username={currentUser.username} size={56} />
           <div>
             <input ref={pfpRef} type="file" accept=".jpeg,.jpg,.png,.gif,.avif,.webp" style={{ display: "none" }} onChange={handlePfpPick} />
             <button onClick={() => pfpRef.current?.click()}
-              style={{
-                background: "#3a3d42", border: "none", borderRadius: 8,
-                padding: "8px 14px", color: "#d1d0c5", fontSize: 13,
-                fontFamily: "inherit", cursor: "pointer",
-              }}>
+              style={{ background: "#3a3d42", border: "none", borderRadius: 8, padding: "8px 14px", color: "#d1d0c5", fontSize: 13, fontFamily: "inherit", cursor: "pointer" }}>
               Change profile picture
             </button>
             {pfpFile && <div style={{ color: "#e2b714", fontSize: 11, marginTop: 4 }}>New picture selected</div>}
@@ -1369,28 +1204,18 @@ function EditProfileModal({
         </div>
 
         <div>
-          <label style={{ color: "#646669", fontSize: 12, display: "block", marginBottom: 6 }}>Display Name</label>
-          <input
-            value={newUsername}
-            onChange={(e) => {
-              if (canChangeUsername) {
-                setNewUsername(e.target.value.replace(/[^a-zA-Z0-9]/g, "").slice(0, 16));
-              }
-            }}
-            disabled={!canChangeUsername}
-            maxLength={16}
-            style={{
-              width: "100%", background: canChangeUsername ? "#3a3d42" : "#2c2e31",
-              border: "1px solid #3a3d42", borderRadius: 8,
-              padding: "10px 14px", color: canChangeUsername ? "#fff" : "#646669",
-              fontSize: 14, fontFamily: "inherit", outline: "none", boxSizing: "border-box",
-              cursor: canChangeUsername ? "text" : "not-allowed",
-            }} />
-          {!canChangeUsername && (
-            <div style={{ color: "#646669", fontSize: 11, marginTop: 4 }}>
-              You can change your username again in {daysUntilUsernameChange} day(s).
-            </div>
-          )}
+          <label style={{ color: "#646669", fontSize: 12, display: "block", marginBottom: 6 }}>Display Name <span style={{ opacity: 0.5 }}>(shown on posts)</span></label>
+          <input value={newDisplayName} onChange={(e) => setNewDisplayName(e.target.value.slice(0, 32))} maxLength={32}
+            style={{ width: "100%", background: "#3a3d42", border: "1px solid #3a3d42", borderRadius: 8, padding: "10px 14px", color: "#fff", fontSize: 14, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }} />
+        </div>
+
+        <div>
+          <label style={{ color: "#646669", fontSize: 12, display: "block", marginBottom: 6 }}>Handle <span style={{ opacity: 0.5 }}>(lowercase, for login & URLs)</span></label>
+          <input value={newHandle} onChange={(e) => { if (canChangeHandle) setNewHandle(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 16)); }}
+            disabled={!canChangeHandle} maxLength={16}
+            placeholder={currentUser.username.toLowerCase()}
+            style={{ width: "100%", background: canChangeHandle ? "#3a3d42" : "#2c2e31", border: "1px solid #3a3d42", borderRadius: 8, padding: "10px 14px", color: canChangeHandle ? "#fff" : "#646669", fontSize: 14, fontFamily: "inherit", outline: "none", boxSizing: "border-box", cursor: canChangeHandle ? "text" : "not-allowed" }} />
+          {!canChangeHandle && <div style={{ color: "#646669", fontSize: 11, marginTop: 4 }}>Handle can change again in {daysUntilHandleChange} day(s).</div>}
         </div>
 
         <div>
@@ -1405,9 +1230,7 @@ function EditProfileModal({
             }} />
           {bannerPreview ? (
             <div style={{ marginBottom: 6 }}>
-              <div
-                ref={bannerDragRef}
-                style={{ position: "relative", borderRadius: 8, overflow: "hidden", height: 120, cursor: isDraggingBanner ? "grabbing" : "grab", userSelect: "none" }}
+              <div ref={bannerDragRef} style={{ position: "relative", borderRadius: 8, overflow: "hidden", height: 120, cursor: isDraggingBanner ? "grabbing" : "grab", userSelect: "none" }}
                 onMouseDown={(e) => {
                   e.preventDefault();
                   setIsDraggingBanner(true);
@@ -1416,34 +1239,12 @@ function EditProfileModal({
                     const pct = Math.max(0, Math.min(100, ((me.clientY - rect.top) / rect.height) * 100));
                     setBannerPosition(pct);
                   };
-                  const onUp = () => {
-                    setIsDraggingBanner(false);
-                    window.removeEventListener("mousemove", onMove);
-                    window.removeEventListener("mouseup", onUp);
-                  };
+                  const onUp = () => { setIsDraggingBanner(false); window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
                   window.addEventListener("mousemove", onMove);
                   window.addEventListener("mouseup", onUp);
-                }}
-                onTouchStart={(e) => {
-                  const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
-                  const onMove = (te: TouchEvent) => {
-                    const pct = Math.max(0, Math.min(100, ((te.touches[0].clientY - rect.top) / rect.height) * 100));
-                    setBannerPosition(pct);
-                  };
-                  const onEnd = () => {
-                    window.removeEventListener("touchmove", onMove);
-                    window.removeEventListener("touchend", onEnd);
-                  };
-                  window.addEventListener("touchmove", onMove);
-                  window.addEventListener("touchend", onEnd);
-                }}
-              >
-                <img
-                  src={bannerPreview}
-                  alt="banner"
-                  draggable={false}
-                  style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: `center ${bannerPosition}%`, display: "block", pointerEvents: "none" }}
-                />
+                }}>
+                <img src={bannerPreview} alt="banner" draggable={false}
+                  style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: `center ${bannerPosition}%`, display: "block", pointerEvents: "none" }} />
                 <div style={{ position: "absolute", inset: 0, background: "#00000033", display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
                   <span style={{ color: "#ffffffcc", fontSize: 12, background: "#00000066", padding: "4px 10px", borderRadius: 6 }}>↕ Drag to reposition</span>
                 </div>
@@ -1459,54 +1260,24 @@ function EditProfileModal({
               Upload Banner
             </button>
           )}
-          <div style={{ color: "#646669", fontSize: 11, marginTop: 4, opacity: 0.5 }}>The image must be 680x240.</div>
         </div>
 
         <div>
-          <label style={{ color: "#646669", fontSize: 12, display: "block", marginBottom: 6 }}>Handle <span style={{ opacity: 0.5 }}>(lowercase, no spaces)</span></label>
-          <input
-            value={newHandle}
-            onChange={(e) => setNewHandle(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 16))}
-            maxLength={16}
-            placeholder={newUsername.toLowerCase()}
-            style={{
-              width: "100%", background: "#3a3d42", border: "1px solid #3a3d42", borderRadius: 8,
-              padding: "10px 14px", color: "#fff", fontSize: 14, fontFamily: "inherit",
-              outline: "none", boxSizing: "border-box",
-            }} />
-          <div style={{ color: "#646669", fontSize: 11, marginTop: 4 }}>@{newHandle || newUsername.toLowerCase()}</div>
-        </div>
-
-        <div>
-          <label style={{ color: "#646669", fontSize: 12, display: "block", marginBottom: 6 }}>Description / Bio <span style={{ opacity: 0.5 }}>({bio.length}/180)</span></label>
-          <textarea
-            value={bio}
-            onChange={(e) => setBio(e.target.value.slice(0, 180))}
-            rows={3}
+          <label style={{ color: "#646669", fontSize: 12, display: "block", marginBottom: 6 }}>Bio <span style={{ opacity: 0.5 }}>({bio.length}/180)</span></label>
+          <textarea value={bio} onChange={(e) => setBio(e.target.value.slice(0, 180))} rows={3}
             placeholder="Tell people about yourself..."
-            style={{
-              width: "100%", background: "#3a3d42", border: "1px solid #3a3d42", borderRadius: 8,
-              padding: "10px 14px", color: "#fff", fontSize: 14, fontFamily: "inherit",
-              outline: "none", boxSizing: "border-box", resize: "none",
-            }} />
+            style={{ width: "100%", background: "#3a3d42", border: "1px solid #3a3d42", borderRadius: 8, padding: "10px 14px", color: "#fff", fontSize: 14, fontFamily: "inherit", outline: "none", boxSizing: "border-box", resize: "none" }} />
         </div>
 
         {error && <div style={{ color: "#ca4754", fontSize: 13 }}>{error}</div>}
 
         <div style={{ display: "flex", gap: 10 }}>
           <button onClick={handleSave} disabled={saving}
-            style={{
-              flex: 1, background: saving ? "#3a3d42" : "#e2b714", border: "none", borderRadius: 8,
-              padding: "10px 0", color: saving ? "#646669" : "#323437",
-              fontWeight: 700, fontSize: 14, fontFamily: "inherit", cursor: saving ? "not-allowed" : "pointer",
-            }}>
+            style={{ flex: 1, background: saving ? "#3a3d42" : "#e2b714", border: "none", borderRadius: 8, padding: "10px 0", color: saving ? "#646669" : "#323437", fontWeight: 700, fontSize: 14, fontFamily: "inherit", cursor: saving ? "not-allowed" : "pointer" }}>
             {saving ? "Saving..." : "Save"}
           </button>
           <button onClick={onClose}
-            style={{
-              flex: 1, background: "#3a3d42", border: "none", borderRadius: 8,
-              padding: "10px 0", color: "#d1d0c5", fontSize: 14, fontFamily: "inherit", cursor: "pointer",
-            }}>
+            style={{ flex: 1, background: "#3a3d42", border: "none", borderRadius: 8, padding: "10px 0", color: "#d1d0c5", fontSize: 14, fontFamily: "inherit", cursor: "pointer" }}>
             Cancel
           </button>
         </div>
@@ -1515,42 +1286,108 @@ function EditProfileModal({
   );
 }
 
-function updateUsernameInComments(
-  comments: Comment[],
-  oldUsername: string,
-  newUsername: string,
-  newPfpUrl: string | null
-): Comment[] {
-  return comments.map((c) => {
-    const updatedReplies = updateUsernameInReplies(c.replies ?? [], oldUsername, newUsername, newPfpUrl);
-    if (c.username === oldUsername) {
-      return { ...c, username: newUsername, pfp_url: newPfpUrl, replies: updatedReplies };
-    }
-    return { ...c, replies: updatedReplies };
-  });
-}
+// ── Force Email Modal ─────────────────────────────────────────────────────────
 
-function updateUsernameInReplies(
-  replies: Reply[],
-  oldUsername: string,
-  newUsername: string,
-  newPfpUrl: string | null
-): Reply[] {
-  return replies.map((r) => {
-    const updatedReplies = updateUsernameInReplies(r.replies ?? [], oldUsername, newUsername, newPfpUrl);
-    if (r.username === oldUsername) {
-      return { ...r, username: newUsername, pfp_url: newPfpUrl, replies: updatedReplies };
+function ForceEmailModal({ currentUser, onDone }: {
+  currentUser: { id: string; username: string };
+  onDone: () => void;
+}) {
+  const [email, setEmail] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState("");
+
+  const isValid = email.includes("@") || email.includes("#");
+
+  async function handleSubmit() {
+    if (!isValid) return;
+    setSaving(true);
+    setError("");
+    try {
+      // Update Supabase auth email
+      const { error: authErr } = await supabase.auth.updateUser({ email });
+      if (authErr) {
+        setError(authErr.message);
+        setSaving(false);
+        return;
+      }
+      // Store in profiles
+      await supabase.from("profiles").update({ email, email_set: true }).eq("id", currentUser.id);
+      setDone(true);
+      setTimeout(() => { onDone(); }, 2200);
+    } catch (e) {
+      setError("Something went wrong. Try again.");
     }
-    return { ...r, replies: updatedReplies };
-  });
+    setSaving(false);
+  }
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, background: "#000000cc", zIndex: 500,
+      display: "flex", alignItems: "center", justifyContent: "center",
+    }}>
+      <div style={{
+        background: "#2c2e31", borderRadius: 16, padding: "36px 32px",
+        width: "100%", maxWidth: 420, border: "1px solid #3a3d42",
+        display: "flex", flexDirection: "column", gap: 20,
+        animation: "toastIn 0.3s ease",
+      }}>
+        {done ? (
+          <div style={{ textAlign: "center", padding: "20px 0" }}>
+            <div style={{ fontSize: 36, marginBottom: 12 }}>✓</div>
+            <div style={{ color: "#e2b714", fontWeight: 700, fontSize: 20, marginBottom: 8 }}>All done. Thank you!</div>
+            <div style={{ color: "#646669", fontSize: 14 }}>Your email has been saved.</div>
+          </div>
+        ) : (
+          <>
+            <div>
+              <div style={{ color: "#e2b714", fontWeight: 700, fontSize: 20, marginBottom: 8 }}>Add an email, quickly.</div>
+              <div style={{ color: "#d1d0c5", fontSize: 14, lineHeight: 1.6, opacity: 0.8 }}>
+                Your account currently uses a temporary login. Add a real email so you can recover your account and log in with email or handle.
+              </div>
+            </div>
+            <div>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && isValid && handleSubmit()}
+                placeholder="you@example.com"
+                autoFocus
+                style={{
+                  width: "100%", background: "#3a3d42", border: `1px solid ${isValid ? "#e2b714" : "#3a3d42"}`,
+                  borderRadius: 10, padding: "12px 16px", color: "#fff", fontSize: 15,
+                  fontFamily: "inherit", outline: "none", boxSizing: "border-box",
+                  transition: "border-color 0.2s",
+                }}
+              />
+              {error && <div style={{ color: "#ca4754", fontSize: 12, marginTop: 6 }}>{error}</div>}
+            </div>
+            <button
+              onClick={handleSubmit}
+              disabled={!isValid || saving}
+              style={{
+                background: isValid && !saving ? "#e2b714" : "#3a3d42",
+                border: "none", borderRadius: 10, padding: "13px 0",
+                color: isValid && !saving ? "#323437" : "#646669",
+                fontWeight: 700, fontSize: 15, fontFamily: "inherit",
+                cursor: isValid && !saving ? "pointer" : "not-allowed",
+                transition: "background 0.2s, color 0.2s",
+              }}
+            >
+              {saving ? "Saving..." : "Continue"}
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
 }
 
 // ── Delete Account Modal ──────────────────────────────────────────────────────
 
 function DeleteAccountModal({
-  currentUser,
-  onClose,
-  onDeleted,
+  currentUser, onClose, onDeleted,
 }: {
   currentUser: { id: string; username: string; pfp_url: string | null };
   onClose: () => void;
@@ -1560,68 +1397,42 @@ function DeleteAccountModal({
 
   async function handleDelete() {
     setDeleting(true);
-
     await supabase.from("posts").delete().eq("user_id", currentUser.id);
-
     const { data: allPosts } = await supabase.from("posts").select("id, comments");
     if (allPosts) {
       for (const post of allPosts) {
         const filtered = removeUserFromComments(post.comments ?? [], currentUser.username);
         const changed = JSON.stringify(filtered) !== JSON.stringify(post.comments);
-        if (changed) {
-          await supabase.from("posts").update({ comments: filtered }).eq("id", post.id);
-        }
+        if (changed) await supabase.from("posts").update({ comments: filtered }).eq("id", post.id);
       }
     }
-
     await supabase.from("notifications").delete().eq("user_id", currentUser.id);
     await supabase.from("profiles").delete().eq("id", currentUser.id);
-
     const { data: { session } } = await supabase.auth.getSession();
     await fetch("/api/delete-account", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${session?.access_token}`,
-      },
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${session?.access_token}` },
       body: JSON.stringify({ userId: currentUser.id }),
     });
-
     await supabase.auth.signOut();
-
     setDeleting(false);
     onDeleted();
   }
 
   return (
-    <div style={{
-      position: "fixed", inset: 0, background: "#000000bb", zIndex: 200,
-      display: "flex", alignItems: "center", justifyContent: "center",
-    }}>
-      <div style={{
-        background: "#2c2e31", borderRadius: 14, padding: "28px",
-        width: "100%", maxWidth: 380, border: "1px solid #3a3d42",
-        display: "flex", flexDirection: "column", gap: 16,
-      }}>
+    <div style={{ position: "fixed", inset: 0, background: "#000000bb", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ background: "#2c2e31", borderRadius: 14, padding: "28px", width: "100%", maxWidth: 380, border: "1px solid #3a3d42", display: "flex", flexDirection: "column", gap: 16 }}>
         <h2 style={{ color: "#ca4754", fontSize: 18, fontWeight: 700, margin: 0 }}>Delete Account</h2>
         <p style={{ color: "#d1d0c5", fontSize: 14, lineHeight: 1.6, margin: 0 }}>
           Do you wish to delete your account? This will delete all your posts, replies, and username.
         </p>
         <div style={{ display: "flex", gap: 10 }}>
           <button onClick={handleDelete} disabled={deleting}
-            style={{
-              flex: 1, background: deleting ? "#3a3d42" : "#ca4754", border: "none", borderRadius: 8,
-              padding: "10px 0", color: "#fff", fontWeight: 700, fontSize: 14,
-              fontFamily: "inherit", cursor: deleting ? "not-allowed" : "pointer",
-            }}>
+            style={{ flex: 1, background: deleting ? "#3a3d42" : "#ca4754", border: "none", borderRadius: 8, padding: "10px 0", color: "#fff", fontWeight: 700, fontSize: 14, fontFamily: "inherit", cursor: deleting ? "not-allowed" : "pointer" }}>
             {deleting ? "Deleting..." : "Yes!"}
           </button>
           <button onClick={onClose} disabled={deleting}
-            style={{
-              flex: 1, background: "#3a3d42", border: "none", borderRadius: 8,
-              padding: "10px 0", color: "#d1d0c5", fontSize: 14,
-              fontFamily: "inherit", cursor: "pointer",
-            }}>
+            style={{ flex: 1, background: "#3a3d42", border: "none", borderRadius: 8, padding: "10px 0", color: "#d1d0c5", fontSize: 14, fontFamily: "inherit", cursor: "pointer" }}>
             No
           </button>
         </div>
@@ -1631,26 +1442,19 @@ function DeleteAccountModal({
 }
 
 function removeUserFromComments(comments: Comment[], username: string): Comment[] {
-  return comments
-    .filter((c) => c.username !== username)
+  return comments.filter((c) => c.username !== username)
     .map((c) => ({ ...c, replies: removeUserFromReplies(c.replies ?? [], username) }));
 }
 
 function removeUserFromReplies(replies: Reply[], username: string): Reply[] {
-  return replies
-    .filter((r) => r.username !== username)
+  return replies.filter((r) => r.username !== username)
     .map((r) => ({ ...r, replies: removeUserFromReplies(r.replies ?? [], username) }));
 }
 
 // ── Accounts Modal ────────────────────────────────────────────────────────────
 
 function AccountsModal({
-  currentUser,
-  linkedAccounts,
-  onClose,
-  onSwitch,
-  onAdd,
-  onRemove,
+  currentUser, linkedAccounts, onClose, onSwitch, onAdd, onRemove,
 }: {
   currentUser: { id: string; username: string; pfp_url: string | null };
   linkedAccounts: { id: string; username: string; pfp_url: string | null }[];
@@ -1676,31 +1480,20 @@ function AccountsModal({
     if (linkedAccounts.find((a) => a.username.toLowerCase() === addUsername.toLowerCase())) { setAddError("Account already added."); return; }
     setAdding(true);
     setAddError("");
-
     const { data: { session: currentSession } } = await supabase.auth.getSession();
-
     const { data, error } = await supabase.auth.signInWithPassword({
       email: `${addUsername.toLowerCase()}@monkeypost.local`,
       password: addPassword,
     });
-
     if (error || !data.user) {
-      if (currentSession?.refresh_token) {
-        await supabase.auth.refreshSession({ refresh_token: currentSession.refresh_token });
-      }
+      if (currentSession?.refresh_token) await supabase.auth.refreshSession({ refresh_token: currentSession.refresh_token });
       setAddError("Invalid username or password.");
       setAdding(false);
       return;
     }
-
     const { data: profile } = await supabase.from("profiles").select("*").eq("id", data.user.id).single();
-
-    if (currentSession?.refresh_token) {
-      await supabase.auth.refreshSession({ refresh_token: currentSession.refresh_token });
-    }
-
+    if (currentSession?.refresh_token) await supabase.auth.refreshSession({ refresh_token: currentSession.refresh_token });
     if (!profile) { setAddError("Account not found."); setAdding(false); return; }
-
     const newAccount = { id: data.user.id, username: profile.username, pfp_url: profile.pfp_url };
     onAdd(newAccount, addPassword);
     setAddUsername("");
@@ -1715,29 +1508,18 @@ function AccountsModal({
     setSwitchError("");
     const saved = JSON.parse(localStorage.getItem("mp_account_passwords") ?? "{}");
     const pw = saved[account.id];
-    if (!pw) {
-      setSwitchError("Password not found, try removing and re-adding this account.");
-      setSwitchingId(null);
-      return;
-    }
+    if (!pw) { setSwitchError("Password not found, try removing and re-adding this account."); setSwitchingId(null); return; }
     const err = await onSwitch(account, pw);
-    if (err) {
-      setSwitchError(err);
-      setSwitchingId(null);
-    } else {
-      onClose();
-    }
+    if (err) { setSwitchError(err); setSwitchingId(null); } else { onClose(); }
   }
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "#000000aa", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center" }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div style={{ background: "#2c2e31", borderRadius: 14, padding: "24px", width: "100%", maxWidth: 380, border: "1px solid #3a3d42", display: "flex", flexDirection: "column", gap: 16 }}>
-
         <h2 style={{ color: "#e2b714", fontSize: 18, fontWeight: 700, margin: 0 }}>
           {mode === "add" ? "Add Account" : "Accounts"}
         </h2>
-
         {mode === "list" && (
           <>
             {switchError && <div style={{ color: "#ca4754", fontSize: 12 }}>{switchError}</div>}
@@ -1746,19 +1528,8 @@ function AccountsModal({
                 const isActive = account.id === currentUser.id;
                 const isSwitching = switchingId === account.id;
                 return (
-                  <div key={account.id}
-                    onClick={() => !isActive && handleSwitch(account)}
-                    style={{
-                      background: "#3a3d42", borderRadius: 10, padding: "12px 14px",
-                      display: "flex", alignItems: "center", gap: 10,
-                      cursor: isActive ? "default" : "pointer",
-                      border: isActive ? "1px solid #e2b714" : "1px solid transparent",
-                      transition: "border 0.15s, background 0.15s",
-                      opacity: isSwitching ? 0.6 : 1,
-                    }}
-                    onMouseEnter={(e) => { if (!isActive) (e.currentTarget as HTMLDivElement).style.background = "#464a50"; }}
-                    onMouseLeave={(e) => { if (!isActive) (e.currentTarget as HTMLDivElement).style.background = "#3a3d42"; }}
-                  >
+                  <div key={account.id} onClick={() => !isActive && handleSwitch(account)}
+                    style={{ background: "#3a3d42", borderRadius: 10, padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, cursor: isActive ? "default" : "pointer", border: isActive ? "1px solid #e2b714" : "1px solid transparent", opacity: isSwitching ? 0.6 : 1 }}>
                     <Avatar url={account.pfp_url} username={account.username} size={32} />
                     <span style={{ color: "#e2b714", fontWeight: 700, fontSize: 14, flex: 1 }}>
                       @{account.username}
@@ -1771,8 +1542,7 @@ function AccountsModal({
                     )}
                     {!isActive && (
                       <button onClick={(e) => { e.stopPropagation(); onRemove(account.id); }}
-                        style={{ background: "none", border: "none", cursor: "pointer", color: "#646669", padding: 0, display: "flex" }}
-                        title="Remove account">
+                        style={{ background: "none", border: "none", cursor: "pointer", color: "#646669", padding: 0, display: "flex" }} title="Remove account">
                         <TrashIcon />
                       </button>
                     )}
@@ -1780,27 +1550,21 @@ function AccountsModal({
                 );
               })}
             </div>
-
             {canAddMore && (
               <button onClick={() => setMode("add")}
                 style={{ background: "#3a3d42", border: "none", borderRadius: 8, padding: "10px 0", color: "#d1d0c5", fontSize: 13, fontFamily: "inherit", cursor: "pointer", fontWeight: 700 }}>
                 + Add More ({allAccounts.length}/5)
               </button>
             )}
-            {!canAddMore && (
-              <div style={{ color: "#646669", fontSize: 12, textAlign: "center" }}>Maximum 5 accounts reached.</div>
-            )}
           </>
         )}
-
         {mode === "add" && (
           <>
             <input value={addUsername} onChange={(e) => setAddUsername(e.target.value.replace(/[^a-zA-Z0-9]/g, "").slice(0, 16))}
               placeholder="Username" maxLength={16}
               style={{ background: "#3a3d42", border: "none", borderRadius: 8, padding: "10px 14px", color: "#fff", fontSize: 14, fontFamily: "inherit", outline: "none" }} />
             <input type="password" value={addPassword} onChange={(e) => setAddPassword(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleAdd()}
-              placeholder="Password"
+              onKeyDown={(e) => e.key === "Enter" && handleAdd()} placeholder="Password"
               style={{ background: "#3a3d42", border: "none", borderRadius: 8, padding: "10px 14px", color: "#fff", fontSize: 14, fontFamily: "inherit", outline: "none" }} />
             {addError && <div style={{ color: "#ca4754", fontSize: 13 }}>{addError}</div>}
             <div style={{ display: "flex", gap: 8 }}>
@@ -1822,21 +1586,124 @@ function AccountsModal({
   );
 }
 
+// ── User Menu (click-to-toggle) ───────────────────────────────────────────────
+
+function UserMenu({
+  currentUser, linkedAccounts, onEditProfile, onAccounts, onLogout, onDeleteAccount,
+}: {
+  currentUser: { id: string; username: string; display_name?: string; pfp_url: string | null };
+  linkedAccounts: { id: string; username: string; pfp_url: string | null }[];
+  onEditProfile: () => void;
+  onAccounts: () => void;
+  onLogout: () => void;
+  onDeleteAccount: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const displayName = currentUser.display_name || currentUser.username;
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [open]);
+
+  return (
+    <div ref={menuRef} style={{ position: "relative" }}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        style={{
+          display: "flex", alignItems: "center", gap: 10, padding: "10px 12px",
+          borderRadius: 8, background: open ? "#2c2e31" : "none",
+          border: "none", cursor: "pointer", width: "100%",
+          transition: "background 0.15s",
+        }}
+        onMouseEnter={(e) => { if (!open) (e.currentTarget as HTMLButtonElement).style.background = "#2c2e31"; }}
+        onMouseLeave={(e) => { if (!open) (e.currentTarget as HTMLButtonElement).style.background = "none"; }}
+      >
+        <Avatar url={currentUser.pfp_url} username={currentUser.username} size={36} />
+        <div style={{ textAlign: "left", flex: 1, minWidth: 0 }}>
+          <div style={{ color: "#e2b714", fontSize: 14, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{displayName}</div>
+          <div style={{ color: "#646669", fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>@{currentUser.username}</div>
+        </div>
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width={14} height={14}
+          style={{ transform: open ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s", flexShrink: 0 }}>
+          <path d="M6 9l6 6 6-6" stroke="#646669" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+
+      {open && (
+        <div style={{
+          position: "absolute", bottom: "calc(100% + 6px)", left: 0, right: 0,
+          background: "#2c2e31", border: "1px solid #3a3d42", borderRadius: 10,
+          overflow: "hidden", boxShadow: "0 8px 24px #00000066",
+          animation: "menuIn 0.15s ease",
+        }}>
+          {[
+            { label: "Edit Profile", action: () => { onEditProfile(); setOpen(false); }, color: "#d1d0c5" },
+            { label: linkedAccounts.length > 0 ? "View Accounts" : "Add Account", action: () => { onAccounts(); setOpen(false); }, color: "#d1d0c5" },
+            { label: "Logout", action: () => { onLogout(); setOpen(false); }, color: "#ca4754" },
+            { label: "Delete Account", action: () => { onDeleteAccount(); setOpen(false); }, color: "#ca4754", subtle: true },
+          ].map(({ label, action, color, subtle }) => (
+            <button key={label} onClick={action}
+              style={{
+                width: "100%", background: "none", border: "none", padding: "11px 16px",
+                color, fontSize: 13, fontFamily: "inherit", cursor: "pointer", textAlign: "left",
+                display: "block", opacity: subtle ? 0.7 : 1,
+                borderTop: label === "Logout" ? "1px solid #3a3d42" : "none",
+              }}
+              onMouseEnter={(e) => (e.currentTarget as HTMLButtonElement).style.background = "#3a3d42"}
+              onMouseLeave={(e) => (e.currentTarget as HTMLButtonElement).style.background = "none"}>
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Helper fns ────────────────────────────────────────────────────────────────
+
+function updateUsernameInComments(comments: Comment[], oldUsername: string, newUsername: string, newPfpUrl: string | null): Comment[] {
+  return comments.map((c) => {
+    const updatedReplies = updateUsernameInReplies(c.replies ?? [], oldUsername, newUsername, newPfpUrl);
+    if (c.username === oldUsername) return { ...c, username: newUsername, pfp_url: newPfpUrl, replies: updatedReplies };
+    return { ...c, replies: updatedReplies };
+  });
+}
+
+function updateUsernameInReplies(replies: Reply[], oldUsername: string, newUsername: string, newPfpUrl: string | null): Reply[] {
+  return replies.map((r) => {
+    const updatedReplies = updateUsernameInReplies(r.replies ?? [], oldUsername, newUsername, newPfpUrl);
+    if (r.username === oldUsername) return { ...r, username: newUsername, pfp_url: newPfpUrl, replies: updatedReplies };
+    return { ...r, replies: updatedReplies };
+  });
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export default function Home() {
   const [step, setStep] = useState<"signup" | "loading" | "app">("loading");
-  const [username, setUsername] = useState("");
+  const [username, setUsername] = useState("");       // display name at signup
+  const [signupHandle, setSignupHandle] = useState("");
+  const [signupEmail, setSignupEmail] = useState("");
   const [password, setPassword] = useState("");
   const [pfpFile, setPfpFile] = useState<File | null>(null);
   const [pfpPreview, setPfpPreview] = useState<string | null>(null);
   const [signupError, setSignupError] = useState("");
   const [authMode, setAuthMode] = useState<"signup" | "login">("signup");
-  const [signupHandle, setSignupHandle] = useState("");
-  const [loginHandle, setLoginHandle] = useState("");
+  const [loginIdentifier, setLoginIdentifier] = useState(""); // email or handle
 
-  const [currentUser, setCurrentUser] = useState<{ id: string; username: string; pfp_url: string | null } | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ id: string; username: string; display_name?: string; pfp_url: string | null } | null>(null);
+  const [showForceEmail, setShowForceEmail] = useState(false);
   const [posts, setPosts] = useState<Post[]>([]);
+  const [postsLoaded, setPostsLoaded] = useState(false);
   const [view, setView] = useState<"posts" | "bookmarks" | "notifications">("posts");
 
   const [postText, setPostText] = useState("");
@@ -1844,9 +1711,6 @@ export default function Home() {
   const [postImageFile, setPostImageFile] = useState<File | null>(null);
   const [postImagePreview, setPostImagePreview] = useState<string | null>(null);
   const [posting, setPosting] = useState(false);
-
-  const [userHovered, setUserHovered] = useState(false);
-  const userHoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [showDeleteAccount, setShowDeleteAccount] = useState(false);
@@ -1858,42 +1722,11 @@ export default function Home() {
   });
 
   const [blockedUsers, setBlockedUsers] = useState<Set<string>>(new Set());
-
-  async function loadBlockedUsers(userId: string) {
-    const { data } = await supabase.from("blocks").select("blocked_id").eq("blocker_id", userId);
-    if (data) setBlockedUsers(new Set(data.map((b: { blocked_id: string }) => b.blocked_id)));
-  }
-
   const [shadowbannedUsers, setShadowbannedUsers] = useState<Set<string>>(new Set());
   const [verifiedUsers,    setVerifiedUsers]    = useState<Set<string>>(new Set());
   const [helperUsers,      setHelperUsers]      = useState<Set<string>>(new Set());
   const [supporterUsers,   setSupporterUsers]   = useState<Set<string>>(new Set());
   const [coolKidsUsers,    setCoolKidsUsers]    = useState<Set<string>>(new Set());
-
-  async function loadShadowbannedUsers() {
-    const { data } = await supabase.from("profiles").select("username").eq("shadowbanned", true);
-    if (data) setShadowbannedUsers(new Set(data.map((p: { username: string }) => p.username.toLowerCase())));
-  }
-
-  async function loadVerifiedUsers() {
-    const { data } = await supabase.from("profiles").select("username").eq("verified", true);
-    if (data) setVerifiedUsers(new Set(data.map((p: { username: string }) => p.username.toLowerCase())));
-  }
-
-  async function loadHelperUsers() {
-    const { data } = await supabase.from("profiles").select("username").eq("helper", true);
-    if (data) setHelperUsers(new Set(data.map((p: { username: string }) => p.username.toLowerCase())));
-  }
-
-  async function loadSupporterUsers() {
-    const { data } = await supabase.from("profiles").select("username").eq("supporter", true);
-    if (data) setSupporterUsers(new Set(data.map((p: { username: string }) => p.username.toLowerCase())));
-  }
-
-  async function loadCoolKidsUsers() {
-    const { data } = await supabase.from("profiles").select("username").eq("cool_kids", true);
-    if (data) setCoolKidsUsers(new Set(data.map((p: { username: string }) => p.username.toLowerCase())));
-  }
 
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
@@ -1901,27 +1734,63 @@ export default function Home() {
   const PAGE_SIZE = 20;
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const postRefs = useRef<(HTMLDivElement | null)[]>([]);
-
   const [refreshing, setRefreshing] = useState(false);
   const [reportToast, setReportToast] = useState(false);
-
   const pfpInputRef = useRef<HTMLInputElement>(null);
   const postImageRef = useRef<HTMLInputElement>(null);
 
-  // ── Realtime subscriptions ────────────────────────────────────────────────
+  // ── Load helpers ────────────────────────────────────────────────────────────
+
+  async function loadBlockedUsers(userId: string) {
+    const { data } = await supabase.from("blocks").select("blocked_id").eq("blocker_id", userId);
+    if (data) setBlockedUsers(new Set(data.map((b: { blocked_id: string }) => b.blocked_id)));
+  }
+  async function loadShadowbannedUsers() {
+    const { data } = await supabase.from("profiles").select("username").eq("shadowbanned", true);
+    if (data) setShadowbannedUsers(new Set(data.map((p: { username: string }) => p.username.toLowerCase())));
+  }
+  async function loadVerifiedUsers() {
+    const { data } = await supabase.from("profiles").select("username").eq("verified", true);
+    if (data) setVerifiedUsers(new Set(data.map((p: { username: string }) => p.username.toLowerCase())));
+  }
+  async function loadHelperUsers() {
+    const { data } = await supabase.from("profiles").select("username").eq("helper", true);
+    if (data) setHelperUsers(new Set(data.map((p: { username: string }) => p.username.toLowerCase())));
+  }
+  async function loadSupporterUsers() {
+    const { data } = await supabase.from("profiles").select("username").eq("supporter", true);
+    if (data) setSupporterUsers(new Set(data.map((p: { username: string }) => p.username.toLowerCase())));
+  }
+  async function loadCoolKidsUsers() {
+    const { data } = await supabase.from("profiles").select("username").eq("cool_kids", true);
+    if (data) setCoolKidsUsers(new Set(data.map((p: { username: string }) => p.username.toLowerCase())));
+  }
+  async function loadNotifications(userId: string) {
+    const { data } = await supabase.from("notifications").select("*").eq("user_id", userId).order("created_at", { ascending: false });
+    if (data) { setNotifications(data as Notification[]); setUnreadNotifCount(data.filter((n: Notification) => !n.read).length); }
+  }
+  async function loadPostsInner() {
+    const { data } = await supabase.from("posts").select("*").order("created_at", { ascending: false });
+    if (data) { setPosts(data as Post[]); setPostsLoaded(true); }
+  }
+
+  // ── Check email set ─────────────────────────────────────────────────────────
+
+  async function checkEmailSet(userId: string) {
+    const { data } = await supabase.from("profiles").select("email_set").eq("id", userId).single();
+    if (!data?.email_set) setShowForceEmail(true);
+  }
+
+  // ── Realtime ────────────────────────────────────────────────────────────────
+
   const currentUserRef = useRef(currentUser);
   useEffect(() => { currentUserRef.current = currentUser; }, [currentUser]);
 
   useEffect(() => {
     if (step !== "app") return;
-
-    const postsChannel = supabase
-      .channel("posts-realtime")
+    const postsChannel = supabase.channel("posts-realtime")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "posts" }, (payload) => {
-        setPosts((prev) => {
-          if (prev.find((p) => p.id === payload.new.id)) return prev;
-          return [payload.new as Post, ...prev];
-        });
+        setPosts((prev) => { if (prev.find((p) => p.id === payload.new.id)) return prev; return [payload.new as Post, ...prev]; });
       })
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "posts" }, (payload) => {
         setPosts((prev) => prev.map((p) => p.id === payload.new.id ? (payload.new as Post) : p));
@@ -1930,33 +1799,19 @@ export default function Home() {
         setPosts((prev) => prev.filter((p) => p.id !== payload.old.id));
       })
       .subscribe();
-
-    return () => {
-      supabase.removeChannel(postsChannel);
-    };
+    return () => { supabase.removeChannel(postsChannel); };
   }, [step]);
 
   useEffect(() => {
     if (step !== "app" || !currentUser) return;
-
-    const notifChannel = supabase
-      .channel(`notifications-${currentUser.id}`)
-      .on("postgres_changes", {
-        event: "INSERT",
-        schema: "public",
-        table: "notifications",
-        filter: `user_id=eq.${currentUser.id}`,
-      }, (payload) => {
+    const notifChannel = supabase.channel(`notifications-${currentUser.id}`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${currentUser.id}` }, (payload) => {
         const newNotif = payload.new as Notification;
         setNotifications((prev) => [newNotif, ...prev]);
         setUnreadNotifCount((prev) => prev + 1);
       })
       .subscribe();
-
-    return () => {
-      supabase.removeChannel(notifChannel);
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => { supabase.removeChannel(notifChannel); };
   }, [step, currentUser?.id]);
 
   useEffect(() => {
@@ -1965,57 +1820,27 @@ export default function Home() {
       if (session?.user) {
         const { data: profile } = await supabase.from("profiles").select("*").eq("id", session.user.id).single();
         if (profile) {
-          setCurrentUser({ id: session.user.id, username: profile.username, pfp_url: profile.pfp_url });
+          setCurrentUser({ id: session.user.id, username: profile.username, display_name: profile.display_name || profile.username, pfp_url: profile.pfp_url });
           await loadPostsInner();
           await loadNotifications(session.user.id);
-          await loadShadowbannedUsers();
-          await loadVerifiedUsers();
-          await loadHelperUsers();
-          await loadSupporterUsers();
-          await loadCoolKidsUsers();
-          await loadBlockedUsers(session.user.id);
+          await Promise.all([loadShadowbannedUsers(), loadVerifiedUsers(), loadHelperUsers(), loadSupporterUsers(), loadCoolKidsUsers(), loadBlockedUsers(session.user.id)]);
           setStep("app");
+          await checkEmailSet(session.user.id);
           return;
         }
       }
       setStep("signup");
     }
     restoreSession();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  async function loadNotifications(userId: string) {
-    const { data } = await supabase
-      .from("notifications")
-      .select("*")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false });
-    if (data) {
-      setNotifications(data as Notification[]);
-      setUnreadNotifCount(data.filter((n: Notification) => !n.read).length);
-    }
-  }
-
-  async function loadPostsInner() {
-    const { data } = await supabase.from("posts").select("*").order("created_at", { ascending: false });
-    if (data) setPosts(data as Post[]);
-  }
-
-  async function loadPosts() { await loadPostsInner(); }
 
   async function handleRefresh() {
     setRefreshing(true);
+    setPostsLoaded(false);
     sortedPostsRef.current = [];
     lastBatchRef.current = 0;
     setVisibleCount(PAGE_SIZE);
-    await Promise.all([
-      loadPostsInner(),
-      loadShadowbannedUsers(),
-      loadVerifiedUsers(),
-      loadHelperUsers(),
-      loadSupporterUsers(),
-      loadCoolKidsUsers(),
-    ]);
+    await Promise.all([loadPostsInner(), loadShadowbannedUsers(), loadVerifiedUsers(), loadHelperUsers(), loadSupporterUsers(), loadCoolKidsUsers()]);
     setRefreshing(false);
   }
 
@@ -2026,43 +1851,33 @@ export default function Home() {
     const targetIndex = Math.max(0, renderedCount - 3);
     const target = postRefs.current[targetIndex];
     if (!target) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) {
-          setVisibleCount((prev) => prev + PAGE_SIZE);
-        }
-      },
-      { threshold: 0.1 }
-    );
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) setVisibleCount((prev) => prev + PAGE_SIZE);
+    }, { threshold: 0.1 });
     observer.observe(target);
     return () => observer.disconnect();
   }, [visibleCount, view, posts.length]);
 
-  function handlePfpPick(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setPfpFile(file);
-    setPfpPreview(URL.createObjectURL(file));
-  }
+  // ── Auth ────────────────────────────────────────────────────────────────────
 
-  function validateUsername(val: string) { return /^[a-z0-9]{1,16}$/i.test(val); }
+  function validateEmail(val: string) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val);
+  }
 
   async function handleSignup() {
     setSignupError("");
-    if (!validateUsername(username)) { setSignupError("Display name must be 1–16 chars, letters and numbers only."); return; }
-    if (!signupHandle.trim() || !/^[a-z0-9_]{1,16}$/.test(signupHandle)) { setSignupError("Handle must be 1–16 chars, lowercase letters, numbers, underscores only."); return; }
+    if (!username.trim() || username.length < 1 || username.length > 32) { setSignupError("Display name must be 1–32 characters."); return; }
+    if (!/^[a-z0-9_]{1,16}$/.test(signupHandle)) { setSignupError("Handle must be 1–16 chars: lowercase letters, numbers, underscores only."); return; }
+    if (!validateEmail(signupEmail)) { setSignupError("Please enter a valid email address."); return; }
     if (!password || password.length < 6) { setSignupError("Password must be at least 6 characters."); return; }
     setStep("loading");
 
+    // Check handle is free
     const { data: existingHandle } = await supabase.from("profiles").select("id").eq("handle", signupHandle).single();
     if (existingHandle) { setStep("signup"); setSignupError("That handle is already taken."); return; }
 
-    const { data: authData, error: authErr } = await supabase.auth.signUp({
-      email: `${signupHandle}@monkeypost.local`,
-      password,
-    });
-
+    // Sign up with real email
+    const { data: authData, error: authErr } = await supabase.auth.signUp({ email: signupEmail, password });
     if (authErr || !authData.user) { setStep("signup"); setSignupError(authErr?.message ?? "Sign up failed."); return; }
 
     const uid = authData.user.id;
@@ -2070,47 +1885,68 @@ export default function Home() {
 
     if (pfpFile) {
       const stripped = await stripImageMetadata(pfpFile);
-      const ext = "jpg";
-      const { data: uploadData } = await supabase.storage.from("pfps").upload(`${uid}.${ext}`, stripped, { upsert: true });
+      const { data: uploadData } = await supabase.storage.from("pfps").upload(`${uid}.jpg`, stripped, { upsert: true });
       if (uploadData) {
         const { data: urlData } = supabase.storage.from("pfps").getPublicUrl(uploadData.path);
         pfp_url = urlData.publicUrl;
       }
     }
 
-    await supabase.from("profiles").upsert({ id: uid, username, handle: signupHandle, pfp_url });
-    setCurrentUser({ id: uid, username, pfp_url });
-    await loadPosts();
+    const displayName = username.trim();
+    await supabase.from("profiles").upsert({
+      id: uid,
+      username: signupHandle,       // handle is the "username" key
+      handle: signupHandle,
+      display_name: displayName,
+      pfp_url,
+      email: signupEmail,
+      email_set: true,
+    });
+
+    setCurrentUser({ id: uid, username: signupHandle, display_name: displayName, pfp_url });
+    await loadPostsInner();
     setStep("app");
   }
 
   async function handleLogin() {
     setSignupError("");
-    if (!loginHandle.trim() || !password) { setSignupError("Please enter your handle and password."); return; }
+    if (!loginIdentifier.trim() || !password) { setSignupError("Please enter your email or handle, and password."); return; }
     setStep("loading");
-    const { data: authData, error: authErr } = await supabase.auth.signInWithPassword({
-      email: `${loginHandle.toLowerCase()}@monkeypost.local`,
-      password,
-    });
-    if (authErr || !authData.user) { setStep("signup"); setSignupError("Invalid handle or password."); return; }
+
+    let email = loginIdentifier.trim();
+
+    // If it looks like a handle (no @domain), look up their email
+    if (!email.includes("@") || !email.includes(".")) {
+      // Try as handle
+      const handle = email.toLowerCase().replace(/^@/, "");
+      const { data: profile } = await supabase.from("profiles").select("email, username").eq("handle", handle).single();
+      if (profile?.email) {
+        email = profile.email;
+      } else {
+        // Fallback: old-style monkeypost.local
+        email = `${handle}@monkeypost.local`;
+      }
+    }
+
+    const { data: authData, error: authErr } = await supabase.auth.signInWithPassword({ email, password });
+    if (authErr || !authData.user) { setStep("signup"); setSignupError("Invalid email/handle or password."); return; }
+
     const { data: profile } = await supabase.from("profiles").select("*").eq("id", authData.user.id).single();
     if (!profile) { setStep("signup"); setSignupError("Account not found."); return; }
-    setCurrentUser({ id: authData.user.id, username: profile.username, pfp_url: profile.pfp_url });
-    await loadPosts();
+
+    setCurrentUser({ id: authData.user.id, username: profile.username, display_name: profile.display_name || profile.username, pfp_url: profile.pfp_url });
+    await loadPostsInner();
     await loadNotifications(authData.user.id);
-    await loadShadowbannedUsers();
-    await loadVerifiedUsers();
-    await loadHelperUsers();
-    await loadSupporterUsers();
-    await loadCoolKidsUsers();
-    await loadBlockedUsers(authData.user.id);
+    await Promise.all([loadShadowbannedUsers(), loadVerifiedUsers(), loadHelperUsers(), loadSupporterUsers(), loadCoolKidsUsers(), loadBlockedUsers(authData.user.id)]);
     setStep("app");
+    await checkEmailSet(authData.user.id);
   }
 
   async function handleLogout() {
     await supabase.auth.signOut();
     setCurrentUser(null);
     setPosts([]);
+    setPostsLoaded(false);
     setNotifications([]);
     setUnreadNotifCount(0);
     setStep("signup");
@@ -2129,13 +1965,15 @@ export default function Home() {
     if (error || !data.user) return error?.message ?? "Invalid password";
     const { data: profile } = await supabase.from("profiles").select("*").eq("id", data.user.id).single();
     if (!profile) return "Account not found";
-    setCurrentUser({ id: data.user.id, username: profile.username, pfp_url: profile.pfp_url });
+    setCurrentUser({ id: data.user.id, username: profile.username, display_name: profile.display_name || profile.username, pfp_url: profile.pfp_url });
     await loadPostsInner();
     await loadNotifications(data.user.id);
     sortedPostsRef.current = [];
     lastBatchRef.current = 0;
     return null;
   }
+
+  // ── Post actions ────────────────────────────────────────────────────────────
 
   function handlePostImagePick(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -2153,25 +1991,14 @@ export default function Home() {
 
     if (shadowbannedUsers.has(currentUser.username.toLowerCase())) {
       const fakePost: Post = {
-        id: crypto.randomUUID(),
-        user_id: currentUser.id,
-        username: currentUser.username,
-        pfp_url: currentUser.pfp_url,
-        content: postText.trim(),
-        image_url: null,
-        likes: 0,
-        liked_by: [],
-        bookmarked_by: [],
-        reposted_by: [],
-        comments: [],
-        created_at: new Date().toISOString(),
-        edited: false,
+        id: crypto.randomUUID(), user_id: currentUser.id,
+        username: currentUser.username, display_name: currentUser.display_name,
+        pfp_url: currentUser.pfp_url, content: postText.trim(), image_url: null,
+        likes: 0, liked_by: [], bookmarked_by: [], reposted_by: [], comments: [],
+        created_at: new Date().toISOString(), edited: false,
       };
       setPosts((prev) => [fakePost, ...prev]);
-      setPostText("");
-      setPostImageFile(null);
-      setPostImagePreview(null);
-      setPosting(false);
+      setPostText(""); setPostImageFile(null); setPostImagePreview(null); setPosting(false);
       return;
     }
 
@@ -2186,27 +2013,16 @@ export default function Home() {
       }
     }
 
-    const { data: myProfile } = await supabase
-      .from("profiles")
-      .select("handle")
-      .eq("id", currentUser.id)
-      .single();
+    const { data: myProfile } = await supabase.from("profiles").select("handle, display_name").eq("id", currentUser.id).single();
     const currentHandle = myProfile?.handle ?? currentUser.username.toLowerCase();
+    const currentDisplayName = myProfile?.display_name || currentUser.display_name || currentUser.username;
 
     await supabase.from("posts").insert({
-      user_id: currentUser.id,
-      username: currentUser.username,
-      handle: currentHandle,
-      pfp_url: currentUser.pfp_url,
-      content: postText.trim(),
-      image_url,
-      likes: 0,
-      liked_by: [],
-      bookmarked_by: [],
-      reposted_by: [],
-      comments: [],
-      edited: false,
-      views: 0,
+      user_id: currentUser.id, username: currentUser.username,
+      display_name: currentDisplayName, handle: currentHandle,
+      pfp_url: currentUser.pfp_url, content: postText.trim(), image_url,
+      likes: 0, liked_by: [], bookmarked_by: [], reposted_by: [], comments: [],
+      edited: false, views: 0,
       verified: verifiedUsers.has(currentUser.username.toLowerCase()),
       helper: helperUsers.has(currentUser.username.toLowerCase()),
       supporter: supporterUsers.has(currentUser.username.toLowerCase()),
@@ -2214,11 +2030,8 @@ export default function Home() {
     });
 
     await sendMentionNotifications(postText.trim(), currentUser.username, null, postText.trim());
-
-    setPostText("");
-    setPostImageFile(null);
-    setPostImagePreview(null);
-    await loadPosts();
+    setPostText(""); setPostImageFile(null); setPostImagePreview(null);
+    await loadPostsInner();
     setPosting(false);
   }
 
@@ -2231,23 +2044,13 @@ export default function Home() {
       if (u !== fromUsername.toLowerCase()) mentioned.add(u);
     }
     if (mentioned.size === 0) return;
-
-    const { data: profiles } = await supabase
-      .from("profiles")
-      .select("id, username")
-      .in("username", [...mentioned]);
-
+    const { data: profiles } = await supabase.from("profiles").select("id, username").in("username", [...mentioned]);
     if (!profiles) return;
     for (const profile of profiles) {
       await supabase.from("notifications").insert({
-        user_id: profile.id,
-        type: "mention",
-        from_username: fromUsername,
-        post_id: postId,
-        post_content: postContent,
-        message_content: text,
-        read: false,
-        created_at: new Date().toISOString(),
+        user_id: profile.id, type: "mention", from_username: fromUsername,
+        post_id: postId, post_content: postContent, message_content: text,
+        read: false, created_at: new Date().toISOString(),
       });
     }
   }
@@ -2257,33 +2060,17 @@ export default function Home() {
     const post = posts.find((p) => p.id === postId);
     if (!post) return;
     const liked = post.liked_by?.includes(currentUser.id);
-
-    if (shadowbannedUsers.has(currentUser.username.toLowerCase())) {
-      const newLikedBy = liked
-        ? post.liked_by.filter((id) => id !== currentUser.id)
-        : [...(post.liked_by ?? []), currentUser.id];
-      const newLikes = liked ? post.likes - 1 : post.likes + 1;
-      setPosts((prev) => prev.map((p) => p.id === postId ? { ...p, likes: newLikes, liked_by: newLikedBy } : p));
-      return;
-    }
-
-    const newLikedBy = liked
-      ? post.liked_by.filter((id) => id !== currentUser.id)
-      : [...(post.liked_by ?? []), currentUser.id];
+    const newLikedBy = liked ? post.liked_by.filter((id) => id !== currentUser.id) : [...(post.liked_by ?? []), currentUser.id];
     const newLikes = liked ? post.likes - 1 : post.likes + 1;
     setPosts((prev) => prev.map((p) => p.id === postId ? { ...p, likes: newLikes, liked_by: newLikedBy } : p));
-    await supabase.from("posts").update({ likes: newLikes, liked_by: newLikedBy }).eq("id", postId);
-
-    if (!liked && post.user_id !== currentUser.id) {
-      await supabase.from("notifications").insert({
-        user_id: post.user_id,
-        type: "like",
-        from_username: currentUser.username,
-        post_id: postId,
-        post_content: post.content,
-        read: false,
-        created_at: new Date().toISOString(),
-      });
+    if (!shadowbannedUsers.has(currentUser.username.toLowerCase())) {
+      await supabase.from("posts").update({ likes: newLikes, liked_by: newLikedBy }).eq("id", postId);
+      if (!liked && post.user_id !== currentUser.id) {
+        await supabase.from("notifications").insert({
+          user_id: post.user_id, type: "like", from_username: currentUser.username,
+          post_id: postId, post_content: post.content, read: false, created_at: new Date().toISOString(),
+        });
+      }
     }
   }
 
@@ -2292,9 +2079,7 @@ export default function Home() {
     const post = posts.find((p) => p.id === postId);
     if (!post) return;
     const bookmarked = post.bookmarked_by?.includes(currentUser.id);
-    const newBookmarkedBy = bookmarked
-      ? post.bookmarked_by.filter((id) => id !== currentUser.id)
-      : [...(post.bookmarked_by ?? []), currentUser.id];
+    const newBookmarkedBy = bookmarked ? post.bookmarked_by.filter((id) => id !== currentUser.id) : [...(post.bookmarked_by ?? []), currentUser.id];
     setPosts((prev) => prev.map((p) => p.id === postId ? { ...p, bookmarked_by: newBookmarkedBy } : p));
     await supabase.from("posts").update({ bookmarked_by: newBookmarkedBy }).eq("id", postId);
   }
@@ -2317,9 +2102,7 @@ export default function Home() {
     const post = posts.find((p) => p.id === postId);
     if (!post) return;
     const reposted = (post.reposted_by ?? []).includes(currentUser.id);
-    const newRepostedBy = reposted
-      ? post.reposted_by.filter((id) => id !== currentUser.id)
-      : [...(post.reposted_by ?? []), currentUser.id];
+    const newRepostedBy = reposted ? post.reposted_by.filter((id) => id !== currentUser.id) : [...(post.reposted_by ?? []), currentUser.id];
     setPosts((prev) => prev.map((p) => p.id === postId ? { ...p, reposted_by: newRepostedBy } : p));
     await supabase.from("posts").update({ reposted_by: newRepostedBy }).eq("id", postId);
   }
@@ -2327,26 +2110,17 @@ export default function Home() {
   async function handleReport(postId: string) {
     setReportToast(true);
     setTimeout(() => setReportToast(false), 3000);
-
     const postUrl = `${window.location.origin}/posts/${postId}`;
     try { await navigator.clipboard.writeText(postUrl); } catch {}
-
     try {
-      await fetch("/api/report", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ postId, postUrl, reportedBy: currentUser?.username ?? "anonymous" }),
-      });
+      await fetch("/api/report", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ postId, postUrl, reportedBy: currentUser?.username ?? "anonymous" }) });
     } catch {}
   }
 
   async function handleAdminDelete(postId: string) {
     setPosts((prev) => prev.filter((p) => p.id !== postId));
     const { error } = await supabase.from("posts").delete().eq("id", postId);
-    if (error) {
-      console.error("Admin delete failed:", error.message);
-      await loadPostsInner();
-    }
+    if (error) { console.error("Admin delete failed:", error.message); await loadPostsInner(); }
   }
 
   async function handleAdminShadowban(username: string) {
@@ -2354,18 +2128,14 @@ export default function Home() {
     setShadowbannedUsers((prev) => new Set([...prev, username.toLowerCase()]));
   }
 
-  function handleEditProfileSave(newUsername: string, newPfpUrl: string | null, newHandle: string) {
-    setCurrentUser((prev) => prev ? { ...prev, username: newUsername, pfp_url: newPfpUrl } : prev);
+  function handleEditProfileSave(newUsername: string, newPfpUrl: string | null, newHandle: string, newDisplayName: string) {
+    setCurrentUser((prev) => prev ? { ...prev, username: newUsername, display_name: newDisplayName, pfp_url: newPfpUrl } : prev);
     setPosts((prev) => prev.map((p) => {
-      if (p.user_id === currentUser?.id) {
-        return { ...p, username: newUsername, pfp_url: newPfpUrl, handle: newHandle };
-      }
+      if (p.user_id === currentUser?.id) return { ...p, username: newUsername, display_name: newDisplayName, pfp_url: newPfpUrl, handle: newHandle };
       return p;
     }));
     if (currentUser) {
-      const updated = linkedAccounts.map((a) =>
-        a.id === currentUser.id ? { ...a, username: newUsername, pfp_url: newPfpUrl } : a
-      );
+      const updated = linkedAccounts.map((a) => a.id === currentUser.id ? { ...a, username: newUsername, pfp_url: newPfpUrl } : a);
       saveLinkedAccounts(updated);
     }
     setShowEditProfile(false);
@@ -2379,10 +2149,10 @@ export default function Home() {
     await supabase.from("notifications").update({ read: true }).eq("user_id", currentUser.id);
   }
 
-  // ── ALGORITHM ──────────────────────────────────────────────────────────────
+  // ── IMPROVED ALGORITHM ─────────────────────────────────────────────────────
+  // Goals: relevance, freshness, author diversity, discovery, anti-spam
 
-  function scorePost(post: Post): number {
-    const now = Date.now();
+  function scorePost(post: Post, now: number): number {
     const ageMs = now - new Date(post.created_at).getTime();
     const ageHours = ageMs / (1000 * 60 * 60);
 
@@ -2391,36 +2161,47 @@ export default function Home() {
     const reposts = (post.reposted_by ?? []).length;
     const views = Math.max(post.views ?? 1, 1);
 
-    const engagementRate =
-      (likes * 1.0 + comments * 2.5 + reposts * 4.0) / views;
+    // Engagement rate — weighted interactions per view
+    const weightedInteractions = likes * 1.0 + comments * 2.5 + reposts * 4.0;
+    const engagementRate = weightedInteractions / views;
 
+    // Volume log score
     const volumeScore = Math.log1p(likes + comments * 2 + reposts * 3);
 
-    function countAllReplies(commentList: Comment[]): number {
-      let total = 0;
-      for (const c of commentList) {
-        total += 1 + countAllReplies((c.replies ?? []) as Comment[]);
-      }
-      return total;
+    // Count nested replies for depth bonus
+    function countAllReplies(list: Comment[]): number {
+      let n = 0;
+      for (const c of list) n += 1 + countAllReplies((c.replies ?? []) as Comment[]);
+      return n;
     }
     const totalReplies = countAllReplies(post.comments ?? []);
-    const depthBonus = Math.log1p(totalReplies) * 0.4;
+    const depthBonus = Math.log1p(totalReplies) * 0.5;
 
+    // Velocity: interactions per hour in first 8 hours (extended window)
     let velocityMultiplier = 1.0;
-    if (ageHours < 6 && ageHours > 0) {
-      const interactionsPerHour = (likes + comments * 2 + reposts * 3) / ageHours;
-      velocityMultiplier = 1.0 + Math.min(interactionsPerHour / 40, 1.5);
+    if (ageHours < 8 && ageHours > 0) {
+      const interactionsPerHour = weightedInteractions / ageHours;
+      velocityMultiplier = 1.0 + Math.min(interactionsPerHour / 30, 2.0);
     }
 
-    const imageBonus = post.image_url ? 0.15 : 0.0;
-    const verifiedBonus = post.verified ? 0.1 : 0.0;
-    const freshnessBump = ageHours < 1 ? (1 - ageHours) * 0.3 : 0;
+    // Recency freshness bump (fades smoothly over 2h)
+    const freshnessBump = ageHours < 2 ? Math.pow(1 - ageHours / 2, 1.5) * 0.4 : 0;
 
-    const HALF_LIFE_HOURS = 18;
+    // Quality signals
+    const imageBonus  = post.image_url ? 0.18 : 0;
+    const verifiedBonus = post.verified ? 0.12 : 0;
+
+    // Content length bonus (longer = more effort, slight boost)
+    const contentLen = (post.content ?? "").length;
+    const lengthBonus = contentLen > 80 ? 0.08 : contentLen > 40 ? 0.04 : 0;
+
+    // Exponential decay — 16-hour half-life (faster churn than before)
+    const HALF_LIFE_HOURS = 16;
     const decayFactor = Math.pow(0.5, ageHours / HALF_LIFE_HOURS);
 
+    // Combine
     const rawScore =
-      (engagementRate * 60 + volumeScore * 20 + depthBonus + imageBonus + verifiedBonus + freshnessBump)
+      (engagementRate * 55 + volumeScore * 22 + depthBonus + imageBonus + verifiedBonus + lengthBonus + freshnessBump)
       * velocityMultiplier
       * decayFactor;
 
@@ -2431,49 +2212,58 @@ export default function Home() {
   const lastBatchRef = useRef<number>(0);
 
   function getSortedPosts(postList: Post[], batchEnd: number): Post[] {
+    // On subsequent renders without new batch needed, update in-place
     if (batchEnd <= lastBatchRef.current && sortedPostsRef.current.length > 0) {
       const existingIds = new Set(sortedPostsRef.current.map((p) => p.id));
       const currentIds = new Set(postList.map((p) => p.id));
-
       let merged = sortedPostsRef.current.filter((p) => currentIds.has(p.id));
       merged = merged.map((p) => postList.find((np) => np.id === p.id) ?? p);
       const newPosts = postList.filter((p) => !existingIds.has(p.id));
       merged = [...newPosts, ...merged];
-
       sortedPostsRef.current = merged;
       return merged;
     }
 
     lastBatchRef.current = batchEnd;
-
     const now = Date.now();
-    const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+    const THREE_HOURS_MS = 3 * 60 * 60 * 1000;
 
-    const fresh: Post[] = [];
-    const ranked: Post[] = [];
-    const discovery: Post[] = [];
+    // Buckets
+    const fresh: Post[] = [];       // <3h old — always shown near top
+    const hot: Post[] = [];         // ranked by algorithm
+    const warm: Post[] = [];        // moderate engagement, older
+    const discovery: Post[] = [];   // low/no engagement — surface hidden gems
 
     for (const post of postList) {
       const ageMs = now - new Date(post.created_at).getTime();
       const totalInteractions = (post.likes ?? 0) + (post.comments?.length ?? 0) + (post.reposted_by?.length ?? 0);
 
-      if (ageMs < TWO_HOURS_MS) {
+      if (ageMs < THREE_HOURS_MS) {
         fresh.push(post);
-      } else if (totalInteractions <= 2) {
-        discovery.push(post);
+      } else if (totalInteractions >= 5) {
+        hot.push(post);
+      } else if (totalInteractions >= 1) {
+        warm.push(post);
       } else {
-        ranked.push(post);
+        discovery.push(post);
       }
     }
 
-    fresh.sort((a, b) => scorePost(b) - scorePost(a));
-    ranked.sort((a, b) => scorePost(b) - scorePost(a));
-    discovery.sort(() => Math.random() - 0.5);
+    fresh.sort((a, b) => scorePost(b, now) - scorePost(a, now));
+    hot.sort((a, b) => scorePost(b, now) - scorePost(a, now));
+    warm.sort((a, b) => scorePost(b, now) - scorePost(a, now));
+    // Shuffle discovery with slight recency tilt
+    discovery.sort((a, b) => {
+      const recencyA = new Date(a.created_at).getTime();
+      const recencyB = new Date(b.created_at).getTime();
+      return (Math.random() * 0.6 + 0.2) * (recencyB - recencyA);
+    });
 
+    // Author diversity: no author appears 3x in a row
     function applyAuthorDiversity(list: Post[]): Post[] {
       const result: Post[] = [];
       const recentAuthors: string[] = [];
-      const pending: Post[] = [...list];
+      const pending = [...list];
       const deferred: Post[] = [];
 
       while (pending.length > 0 || deferred.length > 0) {
@@ -2481,11 +2271,10 @@ export default function Home() {
         const source = [...pending, ...deferred];
         for (let i = 0; i < source.length; i++) {
           const post = source[i];
-          const authorId = post.user_id;
           const lastTwo = recentAuthors.slice(-2);
-          if (lastTwo.length < 2 || !lastTwo.every((a) => a === authorId)) {
+          if (lastTwo.length < 2 || !lastTwo.every((a) => a === post.user_id)) {
             result.push(post);
-            recentAuthors.push(authorId);
+            recentAuthors.push(post.user_id);
             const pi = pending.indexOf(post);
             if (pi !== -1) pending.splice(pi, 1);
             else deferred.splice(deferred.indexOf(post), 1);
@@ -2502,26 +2291,41 @@ export default function Home() {
       return result;
     }
 
-    const diverseRanked = applyAuthorDiversity(ranked);
+    const diverseHot = applyAuthorDiversity(hot);
+    const diverseWarm = applyAuthorDiversity(warm);
 
+    // Interleave: fresh → hot (with warm & discovery sprinkled in)
     const result: Post[] = [...fresh];
-    const DISCOVERY_INTERVAL = 8;
+    const HOT_PER_WARM = 6;     // insert 1 warm every 6 hot posts
+    const DISCOVERY_INTERVAL = 9; // insert 1 discovery every 9 posts total
+
+    let warmIdx = 0;
     let discoveryIdx = 0;
 
-    for (let i = 0; i < diverseRanked.length; i++) {
-      result.push(diverseRanked[i]);
-      if ((i + 1) % DISCOVERY_INTERVAL === 0 && discoveryIdx < discovery.length) {
+    for (let i = 0; i < diverseHot.length; i++) {
+      result.push(diverseHot[i]);
+
+      // Warm insertion
+      if ((i + 1) % HOT_PER_WARM === 0 && warmIdx < diverseWarm.length) {
+        result.push(diverseWarm[warmIdx++]);
+      }
+
+      // Discovery insertion (based on total result length)
+      if (result.length % DISCOVERY_INTERVAL === 0 && discoveryIdx < discovery.length) {
         result.push(discovery[discoveryIdx++]);
       }
     }
 
-    while (discoveryIdx < discovery.length) {
-      result.push(discovery[discoveryIdx++]);
-    }
+    // Append remaining warm
+    while (warmIdx < diverseWarm.length) result.push(diverseWarm[warmIdx++]);
+    // Append remaining discovery
+    while (discoveryIdx < discovery.length) result.push(discovery[discoveryIdx++]);
 
     sortedPostsRef.current = result;
     return result;
   }
+
+  // ── Filtered & sorted posts ─────────────────────────────────────────────────
 
   const allVisiblePosts = view === "bookmarks" && currentUser
     ? posts.filter((p) => p.bookmarked_by?.includes(currentUser.id))
@@ -2563,18 +2367,24 @@ export default function Home() {
           </div>
 
           {authMode === "signup" ? (
-            <input value={username} onChange={(e) => { const val = e.target.value.replace(/[^a-zA-Z0-9]/g, "").slice(0, 16); setUsername(val); }}
-              placeholder="Display Name" maxLength={16}
-              style={{ background: "#2c2e31", border: "1px solid #3a3d42", borderRadius: 8, padding: "12px 16px", color: "#fff", fontSize: 15, fontFamily: "inherit", outline: "none", width: "100%", boxSizing: "border-box" }} />
+            <>
+              <input value={username}
+                onChange={(e) => setUsername(e.target.value.slice(0, 32))}
+                placeholder="Display Name (shown on posts)" maxLength={32}
+                style={{ background: "#2c2e31", border: "1px solid #3a3d42", borderRadius: 8, padding: "12px 16px", color: "#fff", fontSize: 15, fontFamily: "inherit", outline: "none", width: "100%", boxSizing: "border-box" }} />
+              <input value={signupHandle}
+                onChange={(e) => setSignupHandle(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 16))}
+                placeholder="Handle (e.g. kiirod)" maxLength={16}
+                style={{ background: "#2c2e31", border: "1px solid #3a3d42", borderRadius: 8, padding: "12px 16px", color: "#fff", fontSize: 15, fontFamily: "inherit", outline: "none", width: "100%", boxSizing: "border-box" }} />
+              <input type="email" value={signupEmail}
+                onChange={(e) => setSignupEmail(e.target.value)}
+                placeholder="Email address"
+                style={{ background: "#2c2e31", border: "1px solid #3a3d42", borderRadius: 8, padding: "12px 16px", color: "#fff", fontSize: 15, fontFamily: "inherit", outline: "none", width: "100%", boxSizing: "border-box" }} />
+            </>
           ) : (
-            <input value={loginHandle} onChange={(e) => setLoginHandle(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 16))}
-              placeholder="Handle (e.g. kiirod)"
-              style={{ background: "#2c2e31", border: "1px solid #3a3d42", borderRadius: 8, padding: "12px 16px", color: "#fff", fontSize: 15, fontFamily: "inherit", outline: "none", width: "100%", boxSizing: "border-box" }} />
-          )}
-
-          {authMode === "signup" && (
-            <input value={signupHandle} onChange={(e) => setSignupHandle(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 16))}
-              placeholder="Handle (e.g. kiirod)"
+            <input value={loginIdentifier}
+              onChange={(e) => setLoginIdentifier(e.target.value)}
+              placeholder="Email or handle"
               style={{ background: "#2c2e31", border: "1px solid #3a3d42", borderRadius: 8, padding: "12px 16px", color: "#fff", fontSize: 15, fontFamily: "inherit", outline: "none", width: "100%", boxSizing: "border-box" }} />
           )}
 
@@ -2585,13 +2395,13 @@ export default function Home() {
 
           {authMode === "signup" && (
             <>
-              <input ref={pfpInputRef} type="file" accept=".jpeg,.jpg,.png,.gif,.avif,.webp" style={{ display: "none" }} onChange={handlePfpPick} />
+              <input ref={pfpInputRef} type="file" accept=".jpeg,.jpg,.png,.gif,.avif,.webp" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (!f) return; setPfpFile(f); setPfpPreview(URL.createObjectURL(f)); }} />
               <button onClick={() => pfpInputRef.current?.click()}
                 style={{ background: "#2c2e31", border: "1px solid #3a3d42", borderRadius: 8, padding: "12px 16px", color: "#d1d0c5", fontSize: 15, fontFamily: "inherit", cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", gap: 10 }}>
                 {pfpPreview ? (
                   <><img src={pfpPreview} alt="pfp" style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover" }} /><span style={{ color: "#e2b714" }}>Profile picture selected</span></>
                 ) : (
-                  <><span style={{ color: "#646669" }}>📷</span><span>Upload Profile Picture</span></>
+                  <><span style={{ color: "#646669" }}>📷</span><span>Upload Profile Picture (optional)</span></>
                 )}
               </button>
             </>
@@ -2600,7 +2410,7 @@ export default function Home() {
           {signupError && <div style={{ color: "#ca4754", fontSize: 13 }}>{signupError}</div>}
 
           <button onClick={authMode === "login" ? handleLogin : handleSignup}
-            style={{ background: "#e2b714", border: "none", borderRadius: 8, padding: "13px 16px", color: "#323437", fontSize: 15, fontWeight: 700, fontFamily: "inherit", cursor: "pointer", marginTop: 4, transition: "opacity 0.15s" }}>
+            style={{ background: "#e2b714", border: "none", borderRadius: 8, padding: "13px 16px", color: "#323437", fontSize: 15, fontWeight: 700, fontFamily: "inherit", cursor: "pointer", marginTop: 4 }}>
             {authMode === "login" ? "Log in!" : "Sign up!"}
           </button>
         </div>
@@ -2608,16 +2418,37 @@ export default function Home() {
     );
   }
 
-  // ── Loading screen ─────────────────────────────────────────────────────────
+  // ── Loading / skeleton screen ──────────────────────────────────────────────
 
   if (step === "loading") {
     return (
       <main style={{ minHeight: "100vh", display: "flex", flexDirection: "column", background: "#323437", fontFamily: "var(--font-roboto-mono), monospace" }}>
-        <div style={{ width: "100%", padding: "20px 32px", borderBottom: "1px solid #3a3d42" }}>
+        <style>{`
+          @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+        `}</style>
+        {/* Skeleton header */}
+        <div style={{ width: "100%", padding: "16px 32px", borderBottom: "1px solid #3a3d42", display: "flex", alignItems: "center", gap: 16 }}>
           <span style={{ fontSize: 22, fontWeight: 700, color: "#e2b714" }}>monkeypost</span>
+          <div style={{ marginLeft: "auto" }}>
+            <SkeletonBlock width={120} height={34} borderRadius={8} />
+          </div>
         </div>
-        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <LoadingSpinner />
+        <div style={{ display: "flex", maxWidth: 1100, margin: "0 auto", width: "100%", padding: "0 16px" }}>
+          {/* Skeleton sidebar */}
+          <aside style={{ width: 220, flexShrink: 0, padding: "32px 0", display: "flex", flexDirection: "column", gap: 12 }}>
+            {[1,2,3,4,5].map(i => <SkeletonBlock key={i} width="80%" height={36} borderRadius={8} />)}
+            <div style={{ marginTop: "auto", paddingTop: 24 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px" }}>
+                <SkeletonBlock width={36} height={36} borderRadius={18} style={{ flexShrink: 0 }} />
+                <SkeletonBlock width={100} height={14} />
+              </div>
+            </div>
+          </aside>
+          {/* Skeleton feed */}
+          <div style={{ flex: 1, padding: "24px 24px 24px 32px", maxWidth: 680 }}>
+            <SkeletonBlock width="100%" height={110} borderRadius={12} style={{ marginBottom: 20 }} />
+            <SkeletonFeed />
+          </div>
         </div>
       </main>
     );
@@ -2630,22 +2461,24 @@ export default function Home() {
       <style>{`
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         @keyframes toastIn { from { opacity: 0; transform: translateY(-12px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes menuIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
         @keyframes notifFlash { 0% { border-color: #3a3d42; } 30% { border-color: #e2b714; box-shadow: 0 0 8px #e2b71440; } 70% { border-color: #e2b714; box-shadow: 0 0 8px #e2b71440; } 100% { border-color: #3a3d42; } }
         .notif-new { animation: notifFlash 1s ease forwards; }
       `}</style>
+
+      {/* Force email modal */}
+      {showForceEmail && currentUser && (
+        <ForceEmailModal currentUser={currentUser} onDone={() => setShowForceEmail(false)} />
+      )}
+
       {showEditProfile && currentUser && (
-        <EditProfileModal
-          currentUser={currentUser}
-          onClose={() => setShowEditProfile(false)}
-          onSave={handleEditProfileSave}
-        />
+        <EditProfileModal currentUser={currentUser} onClose={() => setShowEditProfile(false)} onSave={handleEditProfileSave} />
       )}
       {showAccountsModal && currentUser && (
         <AccountsModal
-          currentUser={currentUser}
-          linkedAccounts={linkedAccounts}
-          onClose={() => setShowAccountsModal(false)}
-          onSwitch={switchToAccount}
+          currentUser={currentUser} linkedAccounts={linkedAccounts}
+          onClose={() => setShowAccountsModal(false)} onSwitch={switchToAccount}
           onAdd={(account, password) => {
             saveLinkedAccounts([...linkedAccounts, account]);
             const saved = JSON.parse(localStorage.getItem("mp_account_passwords") ?? "{}");
@@ -2657,48 +2490,26 @@ export default function Home() {
             const saved = JSON.parse(localStorage.getItem("mp_account_passwords") ?? "{}");
             delete saved[id];
             localStorage.setItem("mp_account_passwords", JSON.stringify(saved));
-          }}
-        />
+          }} />
       )}
       {showDeleteAccount && currentUser && (
-        <DeleteAccountModal
-          currentUser={currentUser}
-          onClose={() => setShowDeleteAccount(false)}
-          onDeleted={() => {
-            setCurrentUser(null);
-            setPosts([]);
-            setNotifications([]);
-            setUnreadNotifCount(0);
-            setStep("signup");
-          }}
-        />
+        <DeleteAccountModal currentUser={currentUser} onClose={() => setShowDeleteAccount(false)}
+          onDeleted={() => { setCurrentUser(null); setPosts([]); setPostsLoaded(false); setNotifications([]); setUnreadNotifCount(0); setStep("signup"); }} />
       )}
 
       {reportToast && (
-        <div style={{
-          position: "fixed", top: 20, left: 20, zIndex: 999,
-          background: "#2c2e31", border: "1px solid #ca4754", borderRadius: 10,
-          padding: "12px 20px", color: "#d1d0c5", fontSize: 14, fontWeight: 600,
-          animation: "toastIn 0.25s ease",
-          display: "flex", alignItems: "center", gap: 10,
-        }}>
+        <div style={{ position: "fixed", top: 20, left: 20, zIndex: 999, background: "#2c2e31", border: "1px solid #ca4754", borderRadius: 10, padding: "12px 20px", color: "#d1d0c5", fontSize: 14, fontWeight: 600, animation: "toastIn 0.25s ease", display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ color: "#ca4754" }}>⚑</span> Post reported. Link copied.
         </div>
       )}
 
+      {/* Header */}
       <div style={{ width: "100%", padding: "16px 32px", borderBottom: "1px solid #3a3d42", display: "flex", alignItems: "center", gap: 16, position: "sticky", top: 0, background: "#323437", zIndex: 10 }}>
         <span style={{ fontSize: 22, fontWeight: 700, color: "#e2b714", letterSpacing: "-0.5px" }}>monkeypost</span>
         <a href="/search"
-          style={{
-            marginLeft: "auto", display: "flex", alignItems: "center", gap: 8,
-            background: "#2c2e31", border: "1px solid #3a3d42", borderRadius: 8,
-            padding: "7px 14px", color: "#646669", fontSize: 13,
-            fontFamily: "inherit", textDecoration: "none", cursor: "pointer",
-            transition: "border-color 0.15s",
-          }}
+          style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8, background: "#2c2e31", border: "1px solid #3a3d42", borderRadius: 8, padding: "7px 14px", color: "#646669", fontSize: 13, fontFamily: "inherit", textDecoration: "none", cursor: "pointer", transition: "border-color 0.15s" }}
           onMouseEnter={(e) => (e.currentTarget.style.borderColor = "#646669")}
-          onMouseLeave={(e) => (e.currentTarget.style.borderColor = "#3a3d42")}
-        >
+          onMouseLeave={(e) => (e.currentTarget.style.borderColor = "#3a3d42")}>
           <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width={15} height={15}>
             <path d="M11 19C15.4183 19 19 15.4183 19 11C19 6.58172 15.4183 3 11 3C6.58172 3 3 6.58172 3 11C3 15.4183 6.58172 19 11 19Z" stroke="#646669" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             <path d="M21 21L16.65 16.65" stroke="#646669" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -2719,32 +2530,22 @@ export default function Home() {
                   <div style={{ position: "relative", display: "inline-flex" }}>
                     <NotificationIcon />
                     {unreadNotifCount > 0 && (
-                      <span style={{
-                        position: "absolute", top: -3, left: -3,
-                        background: "#e2b714", borderRadius: "50%",
-                        width: 10, height: 10, border: "2px solid #323437",
-                      }} />
+                      <span style={{ position: "absolute", top: -3, left: -3, background: "#e2b714", borderRadius: "50%", width: 10, height: 10, border: "2px solid #323437" }} />
                     )}
                   </div>
                 ),
-                action: () => {
-                  setView("notifications");
-                  markNotificationsRead();
-                  window.history.pushState(null, "", "/notif");
-                }
+                action: () => { setView("notifications"); markNotificationsRead(); window.history.pushState(null, "", "/notif"); }
               },
               { label: "Developers", icon: <DevIcon />, action: () => window.location.href = "/dev" },
               { label: "GitHub", icon: <SupportIcon />, action: () => window.location.href = "/gh" },
               { label: "Bookmarks", icon: <BookmarkIcon filled />, action: () => { setView("bookmarks"); window.history.pushState(null, "", "/bookmarks"); } },
             ].map(({ label, icon, action }) => {
-              const isActive =
-                (label === "Posts" && view === "posts") ||
-                (label === "Bookmarks" && view === "bookmarks") ||
-                (label === "Notifications" && view === "notifications");
+              const isActive = (label === "Posts" && view === "posts") || (label === "Bookmarks" && view === "bookmarks") || (label === "Notifications" && view === "notifications");
               return (
                 <button key={label} onClick={action}
                   style={{
-                    display: "flex", alignItems: "center", gap: 12, background: isActive ? "#2c2e31" : "none",
+                    display: "flex", alignItems: "center", gap: 12,
+                    background: isActive ? "#2c2e31" : "none",
                     border: "none", cursor: isActive ? "default" : "pointer",
                     color: isActive ? "#646669" : "#d1d0c5",
                     fontSize: 14, fontFamily: "inherit", padding: "10px 12px", borderRadius: 8,
@@ -2758,64 +2559,16 @@ export default function Home() {
             })}
           </nav>
 
+          {/* Click-to-toggle user menu */}
           {currentUser && (
-            <div style={{ position: "relative" }}
-              onMouseEnter={() => {
-                if (userHoverTimeout.current) clearTimeout(userHoverTimeout.current);
-                setUserHovered(true);
-              }}
-              onMouseLeave={() => {
-                userHoverTimeout.current = setTimeout(() => setUserHovered(false), 2000);
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 8, background: userHovered ? "#2c2e31" : "none", transition: "background 0.15s", cursor: "default" }}>
-                <Avatar url={currentUser.pfp_url} username={currentUser.username} size={36} />
-                <span style={{ color: "#e2b714", fontSize: 14, fontWeight: 700 }}>@{currentUser.username}</span>
-              </div>
-              {userHovered && (
-                <div style={{
-                  position: "absolute", bottom: "calc(100% + 4px)", left: 12,
-                  display: "flex", gap: 6, flexWrap: "wrap",
-                }}>
-                  <button onClick={() => { setShowEditProfile(true); setUserHovered(false); }}
-                    style={{
-                      background: "#3a3d42", border: "none", borderRadius: 6,
-                      padding: "6px 14px", color: "#d1d0c5", fontWeight: 700,
-                      fontSize: 13, fontFamily: "inherit", cursor: "pointer",
-                      whiteSpace: "nowrap",
-                    }}>
-                    Edit Profile
-                  </button>
-                  <button onClick={() => { setShowAccountsModal(true); setUserHovered(false); }}
-                    style={{
-                      background: "#3a3d42", border: "none", borderRadius: 6,
-                      padding: "6px 14px", color: "#d1d0c5", fontWeight: 700,
-                      fontSize: 13, fontFamily: "inherit", cursor: "pointer",
-                      whiteSpace: "nowrap",
-                    }}>
-                    {linkedAccounts.length > 0 ? "View Accounts" : "Add Account"}
-                  </button>
-                  <button onClick={handleLogout}
-                    style={{
-                      background: "#ca4754", border: "none", borderRadius: 6,
-                      padding: "6px 14px", color: "#fff", fontWeight: 700,
-                      fontSize: 13, fontFamily: "inherit", cursor: "pointer",
-                      whiteSpace: "nowrap",
-                    }}>
-                    Logout
-                  </button>
-                  <button onClick={() => { setShowDeleteAccount(true); setUserHovered(false); }}
-                    style={{
-                      background: "#2c2e31", border: "1px solid #ca4754", borderRadius: 6,
-                      padding: "6px 14px", color: "#ca4754", fontWeight: 700,
-                      fontSize: 13, fontFamily: "inherit", cursor: "pointer",
-                      whiteSpace: "nowrap",
-                    }}>
-                    Delete Account
-                  </button>
-                </div>
-              )}
-            </div>
+            <UserMenu
+              currentUser={currentUser}
+              linkedAccounts={linkedAccounts}
+              onEditProfile={() => setShowEditProfile(true)}
+              onAccounts={() => setShowAccountsModal(true)}
+              onLogout={handleLogout}
+              onDeleteAccount={() => setShowDeleteAccount(true)}
+            />
           )}
         </aside>
 
@@ -2827,7 +2580,6 @@ export default function Home() {
                 placeholder="I just got 150WPM in 60s!" maxLength={180} rows={3}
                 style={{ width: "100%", background: "none", border: "none", color: "#d1d0c5", fontSize: 15, fontFamily: "inherit", resize: "none", outline: "none", lineHeight: 1.5, boxSizing: "border-box" }} />
               <div style={{ fontSize: 12, color: "#646669", textAlign: "right", marginBottom: 10 }}>{postText.length}/180</div>
-
               {postImagePreview && (
                 <div style={{ position: "relative", marginBottom: 10 }}>
                   <img src={postImagePreview} alt="post img" style={{ maxWidth: "100%", borderRadius: 8, maxHeight: 240, objectFit: "cover" }} />
@@ -2835,15 +2587,12 @@ export default function Home() {
                     style={{ position: "absolute", top: 6, right: 6, background: "#323437cc", border: "none", borderRadius: "50%", width: 24, height: 24, cursor: "pointer", color: "#fff", fontSize: 14 }}>×</button>
                 </div>
               )}
-
               {postError && <div style={{ color: "#ca4754", fontSize: 13, marginBottom: 8 }}>{postError}</div>}
-
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div style={{ display: "flex", gap: 8 }}>
                   <input ref={postImageRef} type="file" accept=".jpeg,.jpg,.png,.avif,.webp" style={{ display: "none" }} onChange={handlePostImagePick} />
                   <button onClick={() => postImageRef.current?.click()}
-                    style={{ background: "none", border: "none", cursor: "pointer", padding: 6, borderRadius: 6, color: "#646669", transition: "color 0.15s" }}
-                    title="Attach image">
+                    style={{ background: "none", border: "none", cursor: "pointer", padding: 6, borderRadius: 6, color: "#646669" }} title="Attach image">
                     <ImageIcon />
                   </button>
                 </div>
@@ -2855,7 +2604,7 @@ export default function Home() {
                     cursor: posting || !postText.trim() ? "not-allowed" : "pointer",
                     transition: "background 0.15s", display: "flex", alignItems: "center", gap: 6,
                   }}>
-                  {posting ? <><LoadingSpinner /> Posting...</> : "Post!"}
+                  {posting ? "Posting..." : "Post!"}
                 </button>
               </div>
             </div>
@@ -2863,19 +2612,14 @@ export default function Home() {
 
           {view === "posts" && (
             <div style={{ marginBottom: 16 }}>
-              <button
-                onClick={handleRefresh}
-                disabled={refreshing}
+              <button onClick={handleRefresh} disabled={refreshing}
                 style={{
-                  display: "flex", alignItems: "center", gap: 8,
-                  background: "#2c2e31", border: "1px solid #3a3d42", borderRadius: 8,
-                  padding: "8px 16px", color: refreshing ? "#646669" : "#d1d0c5",
-                  fontSize: 13, fontFamily: "inherit", cursor: refreshing ? "not-allowed" : "pointer",
-                  transition: "background 0.15s, border-color 0.15s",
+                  display: "flex", alignItems: "center", gap: 8, background: "#2c2e31", border: "1px solid #3a3d42",
+                  borderRadius: 8, padding: "8px 16px", color: refreshing ? "#646669" : "#d1d0c5",
+                  fontSize: 13, fontFamily: "inherit", cursor: refreshing ? "not-allowed" : "pointer", transition: "border-color 0.15s",
                 }}
-                onMouseEnter={(e) => { if (!refreshing) { (e.currentTarget as HTMLButtonElement).style.borderColor = "#646669"; } }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = "#3a3d42"; }}
-              >
+                onMouseEnter={(e) => { if (!refreshing) (e.currentTarget as HTMLButtonElement).style.borderColor = "#646669"; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = "#3a3d42"; }}>
                 <RefreshIcon spinning={refreshing} />
                 {refreshing ? "Refreshing..." : "Refresh"}
               </button>
@@ -2887,24 +2631,11 @@ export default function Home() {
             <div>
               <h3 style={{ color: "#646669", fontSize: 13, marginBottom: 16, textTransform: "uppercase", letterSpacing: 1 }}>Notifications</h3>
               {notifications.length === 0 && (
-                <div style={{ color: "#646669", textAlign: "center", marginTop: 60, fontSize: 15 }}>
-                  No notifications yet.
-                </div>
+                <div style={{ color: "#646669", textAlign: "center", marginTop: 60, fontSize: 15 }}>No notifications yet.</div>
               )}
-              {notifications
-                .filter((n) => {
-                  const age = Date.now() - new Date(n.created_at).getTime();
-                  return age < 7 * 24 * 60 * 60 * 1000;
-                })
-                .map((notif) => (
-                <div key={notif.id}
-                  className={!notif.read ? "notif-new" : ""}
-                  style={{
-                    background: "#2c2e31",
-                    borderRadius: 12, padding: "14px 18px", marginBottom: 10,
-                    border: `1px solid ${notif.read ? "#3a3d42" : "#e2b714"}`,
-                    opacity: notif.read ? 0.7 : 1,
-                  }}>
+              {notifications.filter((n) => Date.now() - new Date(n.created_at).getTime() < 7 * 24 * 60 * 60 * 1000).map((notif) => (
+                <div key={notif.id} className={!notif.read ? "notif-new" : ""}
+                  style={{ background: "#2c2e31", borderRadius: 12, padding: "14px 18px", marginBottom: 10, border: `1px solid ${notif.read ? "#3a3d42" : "#e2b714"}`, opacity: notif.read ? 0.7 : 1 }}>
                   <div style={{ color: "#e2b714", fontSize: 13, fontWeight: 700, marginBottom: 4 }}>
                     @{notif.from_username}{" "}
                     <span style={{ color: "#d1d0c5", fontWeight: 400 }}>
@@ -2921,9 +2652,7 @@ export default function Home() {
                       {notif.message_content}
                     </div>
                   )}
-                  <div style={{ color: "#646669", fontSize: 11, marginTop: 6 }}>
-                    {new Date(notif.created_at).toLocaleDateString()}
-                  </div>
+                  <div style={{ color: "#646669", fontSize: 11, marginTop: 6 }}>{new Date(notif.created_at).toLocaleDateString()}</div>
                 </div>
               ))}
             </div>
@@ -2935,38 +2664,31 @@ export default function Home() {
               {view === "bookmarks" && (
                 <h3 style={{ color: "#646669", fontSize: 13, marginBottom: 16, textTransform: "uppercase", letterSpacing: 1 }}>Bookmarks</h3>
               )}
-              {visiblePosts.length === 0 && (
+
+              {/* Skeleton while loading */}
+              {!postsLoaded && view === "posts" && <SkeletonFeed />}
+
+              {postsLoaded && visiblePosts.length === 0 && (
                 <div style={{ color: "#646669", textAlign: "center", marginTop: 60, fontSize: 15 }}>
                   {view === "bookmarks" ? "No bookmarks yet." : "No posts yet. Be the first!"}
                 </div>
               )}
-              {visiblePosts.map((post, index) => (
+              {postsLoaded && visiblePosts.map((post, index) => (
                 <div key={post.id} ref={(el) => { postRefs.current[index] = el; }}>
                   <PostCard
-                    post={post}
-                    currentUser={currentUser}
-                    onLike={handleLike}
-                    onBookmark={handleBookmark}
-                    onDelete={handleDelete}
-                    onEdit={handleEdit}
-                    onRepost={handleRepost}
-                    blockedUsers={blockedUsers}
-                    verifiedUsers={verifiedUsers}
-                    helperUsers={helperUsers}
-                    supporterUsers={supporterUsers}
-                    coolKidsUsers={coolKidsUsers}
-                    onReport={handleReport}
+                    post={post} currentUser={currentUser}
+                    onLike={handleLike} onBookmark={handleBookmark}
+                    onDelete={handleDelete} onEdit={handleEdit} onRepost={handleRepost}
+                    blockedUsers={blockedUsers} verifiedUsers={verifiedUsers}
+                    helperUsers={helperUsers} supporterUsers={supporterUsers}
+                    coolKidsUsers={coolKidsUsers} onReport={handleReport}
                     isAdmin={currentUser?.username.toLowerCase() === ADMIN_USER}
                     isShadowbanned={shadowbannedUsers.has(post.username.toLowerCase())}
-                    onAdminDelete={handleAdminDelete}
-                    onAdminShadowban={handleAdminShadowban}
-                  />
+                    onAdminDelete={handleAdminDelete} onAdminShadowban={handleAdminShadowban} />
                 </div>
               ))}
               {visibleCount < allVisiblePosts.length && (
-                <div style={{ color: "#646669", textAlign: "center", padding: "20px 0", fontSize: 13 }}>
-                  Loading more posts...
-                </div>
+                <div style={{ color: "#646669", textAlign: "center", padding: "20px 0", fontSize: 13 }}>Loading more posts...</div>
               )}
             </div>
           )}
