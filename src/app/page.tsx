@@ -1297,22 +1297,24 @@ function ForceEmailModal({ currentUser, onDone }: {
   const [done, setDone] = useState(false);
   const [error, setError] = useState("");
 
-  const isValid = email.includes("@") || email.includes("#");
+  // Valid if it looks like a real email: something@something.something
+  const isValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 
   async function handleSubmit() {
     if (!isValid) return;
     setSaving(true);
     setError("");
     try {
-      // Update Supabase auth email
-      const { error: authErr } = await supabase.auth.updateUser({ email });
-      if (authErr) {
-        setError(authErr.message);
+      // Store in profiles only — no auth.updateUser() to avoid confirmation emails
+      const { error: dbErr } = await supabase
+        .from("profiles")
+        .update({ email: email.trim(), email_set: true })
+        .eq("id", currentUser.id);
+      if (dbErr) {
+        setError("Something went wrong. Try again.");
         setSaving(false);
         return;
       }
-      // Store in profiles
-      await supabase.from("profiles").update({ email, email_set: true }).eq("id", currentUser.id);
       setDone(true);
       setTimeout(() => { onDone(); }, 2200);
     } catch (e) {
@@ -2017,17 +2019,33 @@ export default function Home() {
     const currentHandle = myProfile?.handle ?? currentUser.username.toLowerCase();
     const currentDisplayName = myProfile?.display_name || currentUser.display_name || currentUser.username;
 
-    await supabase.from("posts").insert({
-      user_id: currentUser.id, username: currentUser.username,
-      display_name: currentDisplayName, handle: currentHandle,
-      pfp_url: currentUser.pfp_url, content: postText.trim(), image_url,
-      likes: 0, liked_by: [], bookmarked_by: [], reposted_by: [], comments: [],
-      edited: false, views: 0,
+    const { error: insertErr } = await supabase.from("posts").insert({
+      user_id: currentUser.id,
+      username: currentUser.username,
+      display_name: currentDisplayName ?? currentUser.username,
+      handle: currentHandle,
+      pfp_url: currentUser.pfp_url,
+      content: postText.trim(),
+      image_url,
+      likes: 0,
+      liked_by: [],
+      bookmarked_by: [],
+      reposted_by: [],
+      comments: [],
+      edited: false,
+      views: 0,
       verified: verifiedUsers.has(currentUser.username.toLowerCase()),
       helper: helperUsers.has(currentUser.username.toLowerCase()),
       supporter: supporterUsers.has(currentUser.username.toLowerCase()),
       cool_kids: coolKidsUsers.has(currentUser.username.toLowerCase()),
     });
+
+    if (insertErr) {
+      console.error("Post insert failed:", insertErr.message);
+      setPostError("Failed to post. Please try again.");
+      setPosting(false);
+      return;
+    }
 
     await sendMentionNotifications(postText.trim(), currentUser.username, null, postText.trim());
     setPostText(""); setPostImageFile(null); setPostImagePreview(null);
